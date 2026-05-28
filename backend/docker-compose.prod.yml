@@ -37,15 +37,26 @@ services:
     environment:
       - PORT=8088
       - ENV=production
-      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-moonlit_prod_password_992}@postgres:5432/${DB_NAME:-moonlit_stories}?sslmode=disable
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-moonlit_prod_secure_pass_928}@postgres:5432/${DB_NAME:-moonlit_stories}?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=${JWT_SECRET:-moonlit_prod_user_jwt_secret_xyz_123}
-      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET:-moonlit_prod_admin_jwt_secret_abc_456}
+      - JWT_SECRET=${JWT_SECRET:-production_user_jwt_token_secret_string_321}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET:-production_admin_jwt_token_secret_string_654}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: always
+
+  admin:
+    build:
+      context: ../admin
+      dockerfile: Dockerfile
+    container_name: moonlit-admin-prod
+    ports:
+      - "127.0.0.1:3098:3000"
+    environment:
+      - PORT=3000
     restart: always
 
 volumes:
