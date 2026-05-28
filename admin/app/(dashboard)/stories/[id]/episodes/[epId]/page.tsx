@@ -28,6 +28,7 @@ export default function EpisodeEditorPage({
   const [status, setStatus] = useState("draft");
   const [contentText, setContentText] = useState("");
   const [previewText, setPreviewText] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
 
   useEffect(() => {
     api.getEpisode(epId)
@@ -40,6 +41,7 @@ export default function EpisodeEditorPage({
         setStatus(data.status);
         setContentText(data.content_text || "");
         setPreviewText(data.preview_text || "");
+        setAudioUrl(data.audio_url || "");
         setLoading(false);
       })
       .catch((err) => {
@@ -63,6 +65,7 @@ export default function EpisodeEditorPage({
         coin_price: isFree ? 0 : Number(coinPrice),
         content_text: contentText,
         preview_text: previewText || contentText.slice(0, 300) + "...",
+        audio_url: audioUrl || null,
         status,
       });
 
@@ -247,6 +250,23 @@ export default function EpisodeEditorPage({
                 className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white text-xs"
                 placeholder="Optional. Visible as preview snippet when chapter is locked..."
               />
+            </div>
+
+            <div className="pt-2 border-t border-[#2d334a]/30">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                🎧 Audio Narration URL
+              </label>
+              <input
+                type="url"
+                value={audioUrl}
+                onChange={(e) => setAudioUrl(e.target.value)}
+                placeholder="https://cdn.example.com/audio/ep1.mp3"
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white text-xs placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none"
+              />
+              {audioUrl && (
+                <audio controls src={audioUrl} className="mt-2 w-full h-8 opacity-80" />
+              )}
+              <p className="mt-1 text-[10px] text-[#94a3b8]">Direct link to .mp3 / .m4a audio file. Leave blank if no audio narration.</p>
             </div>
 
             <button

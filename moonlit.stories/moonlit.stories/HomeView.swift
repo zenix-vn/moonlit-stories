@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Theme Extension
 extension Color {
@@ -25,25 +26,6 @@ func getGradientForString(_ str: String) -> (Color, Color) {
     return colors[hash % colors.count]
 }
 
-// MARK: - Story Genres
-struct LocalGenre: Identifiable {
-    let id = UUID()
-    let name: String
-    let icon: String
-    let color: Color
-}
-
-enum ML {
-    static let genres: [LocalGenre] = [
-        LocalGenre(name: "All",      icon: "square.grid.2x2.fill", color: Color.mlPurple),
-        LocalGenre(name: "Luna",     icon: "moon.stars.fill",       color: Color(red: 0.70, green: 0.40, blue: 1.00)),
-        LocalGenre(name: "Alpha",    icon: "pawprint.fill",         color: Color(red: 0.90, green: 0.30, blue: 0.40)),
-        LocalGenre(name: "Mate",     icon: "heart.fill",            color: Color.mlPink),
-        LocalGenre(name: "Rejected", icon: "heart.slash.fill",      color: Color(red: 0.75, green: 0.20, blue: 0.45)),
-        LocalGenre(name: "Omega",    icon: "sparkles",              color: Color(red: 0.40, green: 0.65, blue: 1.00)),
-    ]
-}
-
 // MARK: - Root View
 struct HomeView: View {
     @State private var tab = 0
@@ -53,27 +35,62 @@ struct HomeView: View {
             MainHomeTab()
                 .tabItem { Label("Home",    systemImage: "house.fill") }
                 .tag(0)
-            PlaceholderTab(icon: "magnifyingglass",    label: "Search")
+            SearchTabView()
                 .tabItem { Label("Search",  systemImage: "magnifyingglass") }
                 .tag(1)
-            PlaceholderTab(icon: "books.vertical.fill", label: "Library")
+            LibraryTabView()
                 .tabItem { Label("Library", systemImage: "books.vertical.fill") }
                 .tag(2)
-            PlaceholderTab(icon: "person.fill",         label: "Profile")
+            PlaceholderTab(icon: "person.fill", label: "Profile")
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(3)
         }
         .tint(Color.mlPurple)
         .preferredColorScheme(.dark)
+        .task {
+            // Pre-warm keyboard service so first tap on Search is instant.
+            // becomeFirstResponder + immediate resignFirstResponder boots the keyboard
+            // process without showing any animation.
+            try? await Task.sleep(for: .seconds(1.5))
+            await MainActor.run { prewarmKeyboard() }
+        }
+    }
+
+    private func prewarmKeyboard() {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first
+        guard let window else { return }
+        let tf = UITextField(frame: .zero)
+        tf.isHidden = true
+        window.addSubview(tf)
+        tf.becomeFirstResponder()
+        tf.resignFirstResponder()
+        tf.removeFromSuperview()
     }
 }
 
 // MARK: - Main Home Tab
 struct MainHomeTab: View {
     @StateObject private var viewModel = HomeViewModel()
-    @State private var genre = "All"
+    @State private var selectedGenreFilter: String? = nil
+
+    private func filteredStories(_ stories: [Story]) -> [Story] {
+        guard let selected = selectedGenreFilter?.trimmingCharacters(in: .whitespacesAndNewlines), !selected.isEmpty else {
+            return stories
+        }
+
+        let selectedLower = selected.lowercased()
+        return stories.filter { story in
+            guard let storyGenres = story.genres, !storyGenres.isEmpty else {
+                return false
+            }
+            return storyGenres.contains { $0.lowercased() == selectedLower }
+        }
+    }
 
     var body: some View {
+        NavigationStack {
         ZStack(alignment: .top) {
             Color.mlBg.ignoresSafeArea()
 
@@ -135,22 +152,64 @@ struct MainHomeTab: View {
                         .frame(maxWidth: .infinity, minHeight: 400)
                     } else {
                         VStack(spacing: 26) {
-                            HeroBanner(banner: viewModel.banners.first)
+                            HeroBanner(
+                                banner: viewModel.topBanners.first ?? viewModel.banners.first,
+                                heroCard: viewModel.heroCard
+                            )
                             
-                            GenrePills(selected: $genre)
+                            GenrePills(
+                                genres: viewModel.genres,
+                                selectedGenre: selectedGenreFilter,
+                                onSelectGenre: { value in
+                                    selectedGenreFilter = value
+                                }
+                            )
                             
                             if !viewModel.continueReading.isEmpty {
                                 ContinueReadingSection(items: viewModel.continueReading)
                             }
                             
-                            FeaturedCarousel(stories: viewModel.tonightsPicks)
-                            
-                            PopularSection(stories: viewModel.trendingNow)
-                            
-                            GenreGrid().padding(.horizontal, 20)
-                            
+                            FeaturedCarousel(
+                                stories: filteredStories(viewModel.tonightsPicks),
+                                storyLibraryStatuses: viewModel.storyLibraryStatuses
+                            )
+
+                            PopularSection(stories: filteredStories(viewModel.trendingNow))
+
+                            GenreGrid(
+                                genres: viewModel.genres,
+                                selectedGenre: selectedGenreFilter,
+                                onSelectGenre: { tappedGenre in
+                                    if selectedGenreFilter == tappedGenre {
+                                        selectedGenreFilter = nil
+                                    } else {
+                                        selectedGenreFilter = tappedGenre
+                                    }
+                                },
+                                onClearFilter: {
+                                    selectedGenreFilter = nil
+                                }
+                            )
+                            .padding(.horizontal, 20)
+
+                            if !viewModel.midBanners.isEmpty {
+                                GeometryReader { geo in
+                                    let cardWidth = max(geo.size.width - 40, 280)
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 12) {
+                                            ForEach(viewModel.midBanners) { midBanner in
+                                                MidPromotionBanner(banner: midBanner)
+                                                    .frame(width: cardWidth)
+                                            }
+                                        }
+                                        .padding(.horizontal, 20)
+                                    }
+                                }
+                                .frame(height: 140)
+                            }
+
                             let releases = viewModel.freeEpisodesToday.isEmpty ? viewModel.tonightsPicks : viewModel.freeEpisodesToday
-                            NewReleasesSection(stories: releases)
+                            NewReleasesSection(stories: filteredStories(releases))
                             
                             Color.clear.frame(height: 90)
                         }
@@ -166,6 +225,56 @@ struct MainHomeTab: View {
 
             TopNav(wallet: viewModel.wallet)
         }
+        .navigationBarHidden(true)
+        } // NavigationStack
+    }
+}
+
+struct MidPromotionBanner: View {
+    let banner: Banner
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            AsyncImage(url: URL(string: banner.imageUrl)) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(LinearGradient(
+                            colors: [Color(red: 0.08, green: 0.02, blue: 0.22), Color(red: 0.30, green: 0.08, blue: 0.52)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                }
+            }
+            .frame(height: 140)
+
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.68)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(banner.title)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                if let subtitle = banner.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.78))
+                        .lineLimit(1)
+                }
+            }
+            .padding(14)
+        }
+        .frame(height: 140)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -251,6 +360,7 @@ struct TopNav: View {
 // MARK: - Hero Banner
 struct HeroBanner: View {
     let banner: Banner?
+    let heroCard: HomeHeroCard?
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -333,13 +443,13 @@ struct HeroBanner: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("1000+")
+                    Text(heroCard?.metric ?? "1000+")
                         .font(.system(size: 38, weight: .black, design: .rounded))
                         .foregroundStyle(Color.white)
-                    Text("Werewolf Novels")
+                    Text(heroCard?.title ?? "Werewolf Novels")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(Color.white.opacity(0.90))
-                    Text("Romance stories · Love episodes")
+                    Text(heroCard?.subtitle ?? "Romance stories · Love episodes")
                         .font(.system(size: 13))
                         .foregroundStyle(Color.white.opacity(0.60))
 
@@ -347,7 +457,7 @@ struct HeroBanner: View {
                         HStack(spacing: 6) {
                             Image(systemName: "play.fill")
                                 .font(.system(size: 12, weight: .bold))
-                            Text("Start Reading")
+                            Text(heroCard?.ctaText ?? "Start Reading")
                                 .font(.system(size: 14, weight: .semibold))
                         }
                         .foregroundStyle(Color.white)
@@ -374,28 +484,70 @@ struct HeroBanner: View {
 
 // MARK: - Genre Pills
 struct GenrePills: View {
-    @Binding var selected: String
+    let genres: [Genre]
+    let selectedGenre: String?
+    let onSelectGenre: (String?) -> Void
+
+    private var genreItems: [(name: String, icon: String, color: Color)] {
+        var items: [(name: String, icon: String, color: Color)] = [
+            ("All", "square.grid.2x2.fill", Color.mlPurple)
+        ]
+
+        for genre in genres {
+            let style = styleForGenre(slug: genre.slug)
+            items.append((genre.name, style.icon, style.color))
+        }
+
+        return items
+    }
+
+    private func styleForGenre(slug: String) -> (icon: String, color: Color) {
+        let key = slug.lowercased()
+        if key.contains("luna") || key.contains("moon") {
+            return ("moon.stars.fill", Color(red: 0.70, green: 0.40, blue: 1.00))
+        }
+        if key.contains("alpha") {
+            return ("pawprint.fill", Color(red: 0.90, green: 0.30, blue: 0.40))
+        }
+        if key.contains("mate") || key.contains("romance") {
+            return ("heart.fill", Color.mlPink)
+        }
+        if key.contains("reject") {
+            return ("heart.slash.fill", Color(red: 0.75, green: 0.20, blue: 0.45))
+        }
+        return ("sparkles", Color(red: 0.40, green: 0.65, blue: 1.00))
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(ML.genres) { g in
+                ForEach(genreItems, id: \.name) { g in
+                    let isSelected = g.name == "All"
+                        ? selectedGenre == nil
+                        : selectedGenre?.lowercased() == g.name.lowercased()
+
                     Button(action: {
-                        withAnimation(.spring(duration: 0.25)) { selected = g.name }
+                        withAnimation(.spring(duration: 0.25)) {
+                            if g.name == "All" {
+                                onSelectGenre(nil)
+                            } else {
+                                onSelectGenre(g.name)
+                            }
+                        }
                     }) {
                         HStack(spacing: 5) {
                             Image(systemName: g.icon).font(.system(size: 12))
                             Text(g.name).font(.system(size: 13, weight: .semibold))
                         }
-                        .foregroundStyle(selected == g.name ? Color.white : g.color)
+                        .foregroundStyle(isSelected ? Color.white : g.color)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background {
                             Capsule()
-                                .fill(selected == g.name ? g.color : g.color.opacity(0.14))
+                                .fill(isSelected ? g.color : g.color.opacity(0.14))
                         }
                         .overlay {
-                            if selected != g.name {
+                            if !isSelected {
                                 Capsule().strokeBorder(g.color.opacity(0.30), lineWidth: 1)
                             }
                         }
@@ -410,6 +562,7 @@ struct GenrePills: View {
 // MARK: - Featured Carousel
 struct FeaturedCarousel: View {
     let stories: [Story]
+    let storyLibraryStatuses: [String: Set<String>]
     @State private var page = 0
 
     var body: some View {
@@ -422,11 +575,16 @@ struct FeaturedCarousel: View {
 
                 TabView(selection: $page) {
                     ForEach(Array(stories.enumerated()), id: \.element.id) { i, story in
-                        FeaturedCard(story: story).tag(i).padding(.horizontal, 20)
+                        FeaturedCard(
+                            story: story,
+                            statuses: storyLibraryStatuses[story.id] ?? []
+                        )
+                        .tag(i)
+                        .padding(.horizontal, 20)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: 210)
+                .frame(height: 238)
 
                 HStack(spacing: 6) {
                     ForEach(0..<stories.count, id: \.self) { i in
@@ -443,12 +601,14 @@ struct FeaturedCarousel: View {
 
 struct FeaturedCard: View {
     let story: Story
+    let statuses: Set<String>
 
     var body: some View {
         let colors = getGradientForString(story.title)
         let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
         let durationStr = "\(1 + abs(story.title.hashValue) % 3)h"
         
+        NavigationLink(destination: StoryDetailView(story: story)) {
         ZStack(alignment: .bottomLeading) {
             if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
                 AsyncImage(url: url) { phase in
@@ -487,6 +647,8 @@ struct FeaturedCard: View {
             )
 
             VStack(alignment: .leading, spacing: 6) {
+                LibraryStatusBadges(statuses: statuses)
+
                 let genreText = story.genres?.first ?? "Romance"
                 Text(genreText.uppercased())
                     .font(.system(size: 9, weight: .bold))
@@ -537,6 +699,49 @@ struct FeaturedCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+        .frame(height: 228)
+        } // NavigationLink
+        .buttonStyle(.plain)
+    }
+}
+
+private struct LibraryStatusBadges: View {
+    let statuses: Set<String>
+
+    private var orderedStatuses: [String] {
+        ["saved", "history", "completed"].filter { statuses.contains($0) }
+    }
+
+    private func style(for status: String) -> (label: String, color: Color) {
+        switch status {
+        case "saved":
+            return ("Saved", Color.mlPurple)
+        case "history":
+            return ("History", Color.mlSubtext)
+        case "completed":
+            return ("Completed", Color(red: 0.25, green: 0.85, blue: 0.55))
+        default:
+            return (status.capitalized, Color.mlSubtext)
+        }
+    }
+
+    var body: some View {
+        if orderedStatuses.isEmpty {
+            EmptyView()
+        } else {
+            HStack(spacing: 6) {
+                ForEach(orderedStatuses, id: \.self) { status in
+                    let item = style(for: status)
+                    Text(item.label)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(item.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(item.color.opacity(0.16)))
+                        .overlay(Capsule().strokeBorder(item.color.opacity(0.28), lineWidth: 1))
+                }
+            }
+        }
     }
 }
 
@@ -546,17 +751,15 @@ private struct ActionBtn: View {
     let filled: Bool
 
     var body: some View {
-        Button(action: {}) {
-            HStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-                Text(label).font(.system(size: 11, weight: .semibold))
-            }
-            .foregroundStyle(filled ? Color.white : Color.mlPurple)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(
-                Capsule().fill(filled ? Color.mlPurple : Color.mlPurple.opacity(0.18))
-            )
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+            Text(label).font(.system(size: 11, weight: .semibold))
         }
+        .foregroundStyle(filled ? Color.white : Color.mlPurple)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(
+            Capsule().fill(filled ? Color.mlPurple : Color.mlPurple.opacity(0.18))
+        )
     }
 }
 
@@ -572,7 +775,12 @@ struct ContinueReadingSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
                     ForEach(items) { item in
-                        ContinueCard(item: item)
+                        NavigationLink {
+                            ContinueReadingDestinationView(item: item)
+                        } label: {
+                            ContinueCard(item: item)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -638,6 +846,93 @@ struct ContinueCard: View {
     }
 }
 
+private struct ContinueReadingDestinationView: View {
+    let item: ContinueReadingItem
+    @State private var story: Story? = nil
+    @State private var episodes: [EpisodeMeta] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        Group {
+            if isLoading {
+                VStack(spacing: 10) {
+                    ProgressView().tint(Color.mlPurple)
+                    Text("Loading chapter...")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.mlSubtext)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.mlBg.ignoresSafeArea())
+            } else if let story {
+                EpisodeReaderView(
+                    episodeId: item.episodeId,
+                    story: story,
+                    episodes: episodes
+                )
+            } else if let errorMessage {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Color.mlPink)
+                    Text(errorMessage)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.mlSubtext)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    Button("Retry") {
+                        Task { await loadDestinationData() }
+                    }
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.mlPurple))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.mlBg.ignoresSafeArea())
+            } else {
+                EmptyView()
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+        .task {
+            await loadDestinationData()
+        }
+    }
+
+    private func loadDestinationData() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            async let storyTask = NetworkService.shared.fetchStoryBySlug(slug: item.storySlug)
+            async let episodesTask = NetworkService.shared.fetchStoryEpisodes(slug: item.storySlug)
+            let storyDetail = try await storyTask
+            let storyEpisodes = try await episodesTask
+            story = Story(
+                id: storyDetail.id,
+                title: storyDetail.title,
+                slug: storyDetail.slug,
+                description: storyDetail.description,
+                hook: storyDetail.hook,
+                coverUrl: storyDetail.coverUrl,
+                freeEpisodeCount: storyDetail.freeEpisodeCount,
+                defaultCoinPrice: 0,
+                totalEpisodes: storyDetail.totalEpisodes,
+                isFeatured: storyDetail.isFeatured,
+                isHot: storyDetail.isHot,
+                isEditorPick: false,
+                genres: storyDetail.genres,
+                moods: storyDetail.moods
+            )
+            episodes = storyEpisodes
+            isLoading = false
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
+}
+
 // MARK: - Popular Section
 struct PopularSection: View {
     let stories: [Story]
@@ -669,6 +964,7 @@ struct AudioCard: View {
         let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
         let durationStr = "\(1 + abs(story.title.hashValue) % 3)h"
         
+        NavigationLink(destination: StoryDetailView(story: story)) {
         VStack(alignment: .leading, spacing: 9) {
             ZStack {
                 if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
@@ -750,25 +1046,90 @@ struct AudioCard: View {
             }
             .frame(width: 148)
         }
+        } // NavigationLink
+        .buttonStyle(.plain)
     }
 }
 
 // MARK: - Werewolf Genre Grid
 struct GenreGrid: View {
-    private let cards: [(String, String, Color, Color)] = [
-        ("Luna",     "moon.stars.fill",   Color(red: 0.08, green: 0.02, blue: 0.20), Color(red: 0.40, green: 0.12, blue: 0.60)),
-        ("Alpha",    "crown.fill",        Color(red: 0.12, green: 0.02, blue: 0.06), Color(red: 0.55, green: 0.10, blue: 0.25)),
-        ("Mate",     "heart.fill",        Color(red: 0.10, green: 0.02, blue: 0.12), Color(red: 0.58, green: 0.12, blue: 0.42)),
-        ("Rejected", "heart.slash.fill",  Color(red: 0.05, green: 0.05, blue: 0.16), Color(red: 0.16, green: 0.22, blue: 0.58)),
-    ]
+    let genres: [Genre]
+    let selectedGenre: String?
+    let onSelectGenre: (String) -> Void
+    let onClearFilter: () -> Void
+
+    private var cards: [(String, String, Color, Color)] {
+        let fallback: [(String, String, Color, Color)] = [
+            ("Luna", "moon.stars.fill", Color(red: 0.08, green: 0.02, blue: 0.20), Color(red: 0.40, green: 0.12, blue: 0.60)),
+            ("Alpha", "crown.fill", Color(red: 0.12, green: 0.02, blue: 0.06), Color(red: 0.55, green: 0.10, blue: 0.25)),
+            ("Mate", "heart.fill", Color(red: 0.10, green: 0.02, blue: 0.12), Color(red: 0.58, green: 0.12, blue: 0.42)),
+            ("Rejected", "heart.slash.fill", Color(red: 0.05, green: 0.05, blue: 0.16), Color(red: 0.16, green: 0.22, blue: 0.58))
+        ]
+
+        guard !genres.isEmpty else { return fallback }
+
+        return genres.prefix(4).map { genre in
+            let style = styleForGenre(slug: genre.slug, name: genre.name)
+            return (genre.name, style.icon, style.top, style.bottom)
+        }
+    }
+
+    private func styleForGenre(slug: String, name: String) -> (icon: String, top: Color, bottom: Color) {
+        let key = slug.lowercased()
+        if key.contains("luna") || key.contains("moon") {
+            return ("moon.stars.fill", Color(red: 0.08, green: 0.02, blue: 0.20), Color(red: 0.40, green: 0.12, blue: 0.60))
+        }
+        if key.contains("alpha") {
+            return ("crown.fill", Color(red: 0.12, green: 0.02, blue: 0.06), Color(red: 0.55, green: 0.10, blue: 0.25))
+        }
+        if key.contains("mate") || key.contains("romance") {
+            return ("heart.fill", Color(red: 0.10, green: 0.02, blue: 0.12), Color(red: 0.58, green: 0.12, blue: 0.42))
+        }
+        if key.contains("reject") {
+            return ("heart.slash.fill", Color(red: 0.05, green: 0.05, blue: 0.16), Color(red: 0.16, green: 0.22, blue: 0.58))
+        }
+
+        let palette: [(String, Color, Color)] = [
+            ("sparkles", Color(red: 0.08, green: 0.03, blue: 0.24), Color(red: 0.34, green: 0.10, blue: 0.62)),
+            ("shield.lefthalf.filled", Color(red: 0.07, green: 0.04, blue: 0.18), Color(red: 0.20, green: 0.26, blue: 0.60)),
+            ("flame.fill", Color(red: 0.14, green: 0.02, blue: 0.07), Color(red: 0.58, green: 0.12, blue: 0.24)),
+            ("book.fill", Color(red: 0.07, green: 0.03, blue: 0.16), Color(red: 0.34, green: 0.14, blue: 0.52))
+        ]
+        let index = abs(name.hashValue) % palette.count
+        let picked = palette[index]
+        return (picked.0, picked.1, picked.2)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Werewolf Genres", action: "See all")
+            HStack {
+                Text("Werewolf Genres")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color.white)
+                Spacer()
+                Button(action: {
+                    if selectedGenre != nil {
+                        onClearFilter()
+                    }
+                }) {
+                    Text(selectedGenre == nil ? "See all" : "Clear")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.mlPurple)
+                }
+            }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(cards, id: \.0) { c in
-                    GenreGridCell(name: c.0, icon: c.1, top: c.2, bot: c.3)
+                    GenreGridCell(
+                        name: c.0,
+                        icon: c.1,
+                        top: c.2,
+                        bot: c.3,
+                        isSelected: selectedGenre?.lowercased() == c.0.lowercased(),
+                        onTap: {
+                            onSelectGenre(c.0)
+                        }
+                    )
                 }
             }
         }
@@ -780,26 +1141,36 @@ struct GenreGridCell: View {
     let icon: String
     let top:  Color
     let bot:  Color
+    let isSelected: Bool
+    let onTap: () -> Void
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(LinearGradient(colors: [top, bot], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(height: 100)
+        Button(action: onTap) {
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(LinearGradient(colors: [top, bot], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(height: 100)
 
-            Image(systemName: icon)
-                .font(.system(size: 58))
-                .foregroundStyle(Color.white.opacity(0.11))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.trailing, 8).padding(.top, 8)
+                Image(systemName: icon)
+                    .font(.system(size: 58))
+                    .foregroundStyle(Color.white.opacity(0.11))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .padding(.trailing, 8).padding(.top, 8)
 
-            Text(name)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Color.white)
-                .padding(.leading, 14).padding(.bottom, 14)
+                Text(name)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.leading, 14).padding(.bottom, 14)
+            }
         }
+        .buttonStyle(.plain)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(isSelected ? Color.mlPurple : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)
+        )
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .animation(.spring(duration: 0.2), value: isSelected)
     }
 }
 
@@ -833,6 +1204,7 @@ struct SmallCard: View {
         let colors = getGradientForString(story.title)
         let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
         
+        NavigationLink(destination: StoryDetailView(story: story)) {
         VStack(alignment: .leading, spacing: 7) {
             ZStack {
                 if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
@@ -896,6 +1268,8 @@ struct SmallCard: View {
             }
             .frame(width: 108)
         }
+        } // NavigationLink
+        .buttonStyle(.plain)
     }
 }
 

@@ -127,6 +127,7 @@ type Episode struct {
 	IsFree                bool            `json:"is_free"`
 	CoinPrice             *int            `json:"coin_price,omitempty"`
 	PreviewText           *string         `json:"preview_text,omitempty"`
+	AudioURL              *string         `json:"audio_url,omitempty"`
 	Status                string          `json:"status"`
 	PublishedAt           *time.Time      `json:"published_at,omitempty"`
 	CreatedBy             *uuid.UUID      `json:"created_by,omitempty"`

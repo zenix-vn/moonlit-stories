@@ -18,6 +18,56 @@ type ContentHandler struct {
 	DB *sql.DB
 }
 
+func (h *ContentHandler) hydrateStoryTaxonomy(ctx context.Context, s *models.Story) {
+	if s == nil {
+		return
+	}
+
+	gRows, err := h.DB.QueryContext(ctx, `
+		SELECT g.name
+		FROM genres g
+		JOIN story_genres sg ON g.id = sg.genre_id
+		WHERE sg.story_id = $1
+		ORDER BY g.sort_order ASC, g.name ASC
+	`, s.ID)
+	if err == nil {
+		defer gRows.Close()
+		genres := make([]string, 0, 4)
+		for gRows.Next() {
+			var name string
+			if scanErr := gRows.Scan(&name); scanErr == nil {
+				genres = append(genres, name)
+			}
+		}
+		s.Genres = genres
+	}
+
+	mRows, err := h.DB.QueryContext(ctx, `
+		SELECT m.name
+		FROM moods m
+		JOIN story_moods sm ON m.id = sm.mood_id
+		WHERE sm.story_id = $1
+		ORDER BY m.name ASC
+	`, s.ID)
+	if err == nil {
+		defer mRows.Close()
+		moods := make([]string, 0, 4)
+		for mRows.Next() {
+			var name string
+			if scanErr := mRows.Scan(&name); scanErr == nil {
+				moods = append(moods, name)
+			}
+		}
+		s.Moods = moods
+	}
+}
+
+func (h *ContentHandler) hydrateStoriesTaxonomy(ctx context.Context, stories []models.Story) {
+	for i := range stories {
+		h.hydrateStoryTaxonomy(ctx, &stories[i])
+	}
+}
+
 // =========================================================================
 // PUBLIC MOBILE ENDPOINTS
 // =========================================================================
@@ -61,6 +111,7 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 		featured.Description = featDesc
 		featured.Hook = featHook
 		featured.CoverURL = featCover
+		h.hydrateStoryTaxonomy(ctx, &featured)
 	}
 
 	// 4. Continue Reading List (join with stories and episodes)
@@ -114,6 +165,7 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 			}
 		}
 	}
+	h.hydrateStoriesTaxonomy(ctx, picks)
 
 	// 6. Trending Now (Hot stories)
 	trending := []models.Story{}
@@ -134,11 +186,12 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 			}
 		}
 	}
+	h.hydrateStoriesTaxonomy(ctx, trending)
 
 	// 7. Active Banners
 	banners := []models.Banner{}
 	bRows, err := h.DB.QueryContext(ctx, `
-		SELECT id, title, subtitle, image_url, deep_link, action_type, action_payload, placement, priority, active, start_at, end_at, target_country_codes
+		SELECT id, title, subtitle, image_url, deep_link, action_type, action_payload, placement, priority, active, start_at, end_at
 		FROM banners
 		WHERE active = true AND placement = 'home_top'
 		ORDER BY priority DESC, created_at DESC
@@ -149,14 +202,48 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 			var b models.Banner
 			var sub, dl, at *string
 			var payload []byte
-			var countries []string
-			if err := bRows.Scan(&b.ID, &b.Title, &sub, &b.ImageURL, &dl, &at, &payload, &b.Placement, &b.Priority, &b.Active, &b.StartAt, &b.EndAt, &countries); err == nil {
+			if err := bRows.Scan(&b.ID, &b.Title, &sub, &b.ImageURL, &dl, &at, &payload, &b.Placement, &b.Priority, &b.Active, &b.StartAt, &b.EndAt); err == nil {
 				b.Subtitle = sub
 				b.DeepLink = dl
 				b.ActionType = at
 				b.ActionPayload = payload
-				b.TargetCountryCodes = countries
+				b.TargetCountryCodes = []string{}
 				banners = append(banners, b)
+			}
+		}
+	}
+
+	// 8. Home hero card config from system_config
+	heroCard := map[string]interface{}{
+		"metric":       "1000+",
+		"title":        "Werewolf Novels",
+		"subtitle":     "Romance stories · Love episodes",
+		"cta_text":     "Start Reading",
+		"cta_deep_link": "",
+	}
+
+	var systemConfigRaw []byte
+	if err := h.DB.QueryRowContext(ctx, "SELECT value FROM app_configs WHERE key = 'system_config'").Scan(&systemConfigRaw); err == nil {
+		var systemConfig map[string]interface{}
+		if unmarshalErr := json.Unmarshal(systemConfigRaw, &systemConfig); unmarshalErr == nil {
+			if rawHero, ok := systemConfig["home_hero_card"]; ok {
+				if heroMap, ok := rawHero.(map[string]interface{}); ok {
+					if v, ok := heroMap["metric"].(string); ok && v != "" {
+						heroCard["metric"] = v
+					}
+					if v, ok := heroMap["title"].(string); ok && v != "" {
+						heroCard["title"] = v
+					}
+					if v, ok := heroMap["subtitle"].(string); ok {
+						heroCard["subtitle"] = v
+					}
+					if v, ok := heroMap["cta_text"].(string); ok && v != "" {
+						heroCard["cta_text"] = v
+					}
+					if v, ok := heroMap["cta_deep_link"].(string); ok {
+						heroCard["cta_deep_link"] = v
+					}
+				}
 			}
 		}
 	}
@@ -168,8 +255,9 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 		"continueReading":   continueList,
 		"tonightsPicks":     picks,
 		"trendingNow":       trending,
-		"freeEpisodesToday": picks, // mock list
+		"freeEpisodesToday": picks,
 		"banners":           banners,
+		"heroCard":          heroCard,
 	})
 }
 
@@ -411,15 +499,15 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 
 	var ep models.Episode
 	var contentJSON []byte
-	var contentHTML, contentText, previewText, slug *string
+	var contentHTML, contentText, previewText, audioURL, slug *string
 	var seasonID *uuid.UUID
 
 	err = h.DB.QueryRowContext(ctx, `
-		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, status, published_at, created_at, updated_at
+		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, status, published_at, created_at, updated_at
 		FROM episodes WHERE id = $1 AND status = 'published'
 	`, episodeID).Scan(
 		&ep.ID, &ep.StoryID, &seasonID, &ep.EpisodeNumber, &ep.Title, &slug, &contentJSON, &contentHTML, &contentText,
-		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
+		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &audioURL, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
 	)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "episode not found"})
@@ -428,6 +516,7 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 	ep.Slug = slug
 	ep.SeasonID = seasonID
 	ep.PreviewText = previewText
+	ep.AudioURL = audioURL
 
 	if !hasAccess {
 		// Hide full content, only return preview text (first paragraph)
@@ -435,6 +524,7 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 		ep.ContentJSON = emptyJSON
 		ep.ContentHTML = nil
 		ep.ContentText = previewText
+		ep.AudioURL = nil
 		return c.JSON(http.StatusForbidden, map[string]interface{}{
 			"error":      "episode is locked",
 			"has_access": false,
@@ -683,9 +773,9 @@ func (h *ContentHandler) AdminCreateEpisode(c echo.Context) error {
 
 	// Insert
 	_, err = h.DB.ExecContext(ctx, `
-		INSERT INTO episodes (id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, status, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft', $15, $15)
-	`, ep.ID, storyID, ep.SeasonID, ep.EpisodeNumber, ep.Title, ep.Slug, ep.ContentJSON, ep.ContentHTML, ep.ContentText, wordCount, estReadingTime, ep.IsFree, ep.CoinPrice, ep.PreviewText, adminID)
+		INSERT INTO episodes (id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, status, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'draft', $16, $16)
+	`, ep.ID, storyID, ep.SeasonID, ep.EpisodeNumber, ep.Title, ep.Slug, ep.ContentJSON, ep.ContentHTML, ep.ContentText, wordCount, estReadingTime, ep.IsFree, ep.CoinPrice, ep.PreviewText, ep.AudioURL, adminID)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create episode: " + err.Error()})
@@ -713,15 +803,15 @@ func (h *ContentHandler) AdminGetEpisodeByID(c echo.Context) error {
 	ctx := c.Request().Context()
 	var ep models.Episode
 	var contentJSON []byte
-	var contentHTML, contentText, previewText, slug *string
+	var contentHTML, contentText, previewText, audioURL, slug *string
 	var seasonID *uuid.UUID
 
 	err = h.DB.QueryRowContext(ctx, `
-		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, status, published_at, created_at, updated_at
+		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, status, published_at, created_at, updated_at
 		FROM episodes WHERE id = $1
 	`, episodeID).Scan(
 		&ep.ID, &ep.StoryID, &seasonID, &ep.EpisodeNumber, &ep.Title, &slug, &contentJSON, &contentHTML, &contentText,
-		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
+		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &audioURL, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "episode not found"})
@@ -735,6 +825,7 @@ func (h *ContentHandler) AdminGetEpisodeByID(c echo.Context) error {
 	ep.ContentHTML = contentHTML
 	ep.ContentText = contentText
 	ep.PreviewText = previewText
+	ep.AudioURL = audioURL
 
 	return c.JSON(http.StatusOK, ep)
 }
@@ -767,9 +858,9 @@ func (h *ContentHandler) AdminUpdateEpisode(c echo.Context) error {
 
 	_, err = h.DB.ExecContext(ctx, `
 		UPDATE episodes
-		SET title = $1, slug = $2, content_json = $3, content_html = $4, content_text = $5, word_count = $6, estimated_reading_time = $7, is_free = $8, coin_price = $9, preview_text = $10, status = $11, updated_by = $12, updated_at = now()
-		WHERE id = $13
-	`, req.Title, req.Slug, req.ContentJSON, req.ContentHTML, req.ContentText, wordCount, estReadingTime, req.IsFree, req.CoinPrice, req.PreviewText, req.Status, adminID, episodeID)
+		SET title = $1, slug = $2, content_json = $3, content_html = $4, content_text = $5, word_count = $6, estimated_reading_time = $7, is_free = $8, coin_price = $9, preview_text = $10, audio_url = $11, status = $12, updated_by = $13, updated_at = now()
+		WHERE id = $14
+	`, req.Title, req.Slug, req.ContentJSON, req.ContentHTML, req.ContentText, wordCount, estReadingTime, req.IsFree, req.CoinPrice, req.PreviewText, req.AudioURL, req.Status, adminID, episodeID)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update episode"})
@@ -788,6 +879,294 @@ func (h *ContentHandler) AdminUpdateEpisode(c echo.Context) error {
 	`, adminID, episodeID, beforeJSON, afterJSON)
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// AdminPublishStory changes story status to published (or archived)
+func (h *ContentHandler) AdminPublishStory(c echo.Context) error {
+	adminID, _ := uuid.Parse(c.Get("admin_id").(string))
+	storyID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid story ID"})
+	}
+
+	type PublishReq struct {
+		Status string `json:"status"` // "published" or "archived"
+	}
+	var req PublishReq
+	if err := c.Bind(&req); err != nil || (req.Status != "published" && req.Status != "archived" && req.Status != "draft") {
+		req.Status = "published"
+	}
+
+	ctx := c.Request().Context()
+
+	var beforeStatus string
+	_ = h.DB.QueryRowContext(ctx, "SELECT status FROM stories WHERE id = $1", storyID).Scan(&beforeStatus)
+
+	_, err = h.DB.ExecContext(ctx, `
+		UPDATE stories SET status = $1, published_at = CASE WHEN $1 = 'published' THEN now() ELSE published_at END, updated_by = $2, updated_at = now()
+		WHERE id = $3
+	`, req.Status, adminID, storyID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update story status"})
+	}
+
+	beforeJSON, _ := json.Marshal(map[string]string{"status": beforeStatus})
+	afterJSON, _ := json.Marshal(map[string]string{"status": req.Status})
+	_, _ = h.DB.ExecContext(ctx, `
+		INSERT INTO admin_audit_logs (admin_user_id, action, entity_type, entity_id, before_data, after_data, created_at)
+		VALUES ($1, 'publish_story', 'stories', $2, $3, $4, now())
+	`, adminID, storyID, beforeJSON, afterJSON)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": req.Status})
+}
+
+// AdminDeleteStory soft-deletes a story by setting status to archived
+func (h *ContentHandler) AdminDeleteStory(c echo.Context) error {
+	adminID, _ := uuid.Parse(c.Get("admin_id").(string))
+	storyID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid story ID"})
+	}
+
+	ctx := c.Request().Context()
+
+	_, err = h.DB.ExecContext(ctx, `UPDATE stories SET status = 'archived', updated_by = $1, updated_at = now() WHERE id = $2`, adminID, storyID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to archive story"})
+	}
+
+	_, _ = h.DB.ExecContext(ctx, `
+		INSERT INTO admin_audit_logs (admin_user_id, action, entity_type, entity_id, created_at)
+		VALUES ($1, 'delete_story', 'stories', $2, now())
+	`, adminID, storyID)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "archived"})
+}
+
+// AdminGetStoryGenresMoods returns all genres and moods for a story plus all available options
+func (h *ContentHandler) AdminGetStoryGenresMoods(c echo.Context) error {
+	storyID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid story ID"})
+	}
+
+	ctx := c.Request().Context()
+
+	// All genres
+	allGenres := []models.Genre{}
+	gRows, err := h.DB.QueryContext(ctx, `SELECT id, name, slug, description, sort_order, active FROM genres ORDER BY sort_order ASC`)
+	if err == nil {
+		defer gRows.Close()
+		for gRows.Next() {
+			var g models.Genre
+			var desc *string
+			if err := gRows.Scan(&g.ID, &g.Name, &g.Slug, &desc, &g.SortOrder, &g.Active); err == nil {
+				g.Description = desc
+				allGenres = append(allGenres, g)
+			}
+		}
+	}
+
+	// All moods
+	allMoods := []models.Mood{}
+	mRows, err := h.DB.QueryContext(ctx, `SELECT id, name, slug, description, active FROM moods`)
+	if err == nil {
+		defer mRows.Close()
+		for mRows.Next() {
+			var m models.Mood
+			var desc *string
+			if err := mRows.Scan(&m.ID, &m.Name, &m.Slug, &desc, &m.Active); err == nil {
+				m.Description = desc
+				allMoods = append(allMoods, m)
+			}
+		}
+	}
+
+	// Selected genre IDs for this story
+	selectedGenreIDs := []string{}
+	sgRows, err := h.DB.QueryContext(ctx, `SELECT genre_id::text FROM story_genres WHERE story_id = $1`, storyID)
+	if err == nil {
+		defer sgRows.Close()
+		for sgRows.Next() {
+			var id string
+			if err := sgRows.Scan(&id); err == nil {
+				selectedGenreIDs = append(selectedGenreIDs, id)
+			}
+		}
+	}
+
+	// Selected mood IDs for this story
+	selectedMoodIDs := []string{}
+	smRows, err := h.DB.QueryContext(ctx, `SELECT mood_id::text FROM story_moods WHERE story_id = $1`, storyID)
+	if err == nil {
+		defer smRows.Close()
+		for smRows.Next() {
+			var id string
+			if err := smRows.Scan(&id); err == nil {
+				selectedMoodIDs = append(selectedMoodIDs, id)
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"all_genres":          allGenres,
+		"all_moods":           allMoods,
+		"selected_genre_ids":  selectedGenreIDs,
+		"selected_mood_ids":   selectedMoodIDs,
+	})
+}
+
+// AdminUpdateStoryGenresMoods replaces the genre and mood associations for a story
+func (h *ContentHandler) AdminUpdateStoryGenresMoods(c echo.Context) error {
+	adminID, _ := uuid.Parse(c.Get("admin_id").(string))
+	storyID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid story ID"})
+	}
+
+	type UpdateReq struct {
+		GenreIDs []string `json:"genre_ids"`
+		MoodIDs  []string `json:"mood_ids"`
+	}
+	var req UpdateReq
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+
+	ctx := c.Request().Context()
+
+	// Replace genres: delete old and insert new
+	_, _ = h.DB.ExecContext(ctx, `DELETE FROM story_genres WHERE story_id = $1`, storyID)
+	for _, gid := range req.GenreIDs {
+		genreID, err := uuid.Parse(gid)
+		if err != nil {
+			continue
+		}
+		_, _ = h.DB.ExecContext(ctx, `INSERT INTO story_genres (story_id, genre_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, storyID, genreID)
+	}
+
+	// Replace moods: delete old and insert new
+	_, _ = h.DB.ExecContext(ctx, `DELETE FROM story_moods WHERE story_id = $1`, storyID)
+	for _, mid := range req.MoodIDs {
+		moodID, err := uuid.Parse(mid)
+		if err != nil {
+			continue
+		}
+		_, _ = h.DB.ExecContext(ctx, `INSERT INTO story_moods (story_id, mood_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, storyID, moodID)
+	}
+
+	afterJSON, _ := json.Marshal(req)
+	_, _ = h.DB.ExecContext(ctx, `
+		INSERT INTO admin_audit_logs (admin_user_id, action, entity_type, entity_id, after_data, created_at)
+		VALUES ($1, 'update_story_taxonomy', 'stories', $2, $3, now())
+	`, adminID, storyID, afterJSON)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// AdminDeleteEpisode soft-deletes an episode
+func (h *ContentHandler) AdminDeleteEpisode(c echo.Context) error {
+	adminID, _ := uuid.Parse(c.Get("admin_id").(string))
+	episodeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid episode ID"})
+	}
+
+	ctx := c.Request().Context()
+
+	var storyID uuid.UUID
+	_ = h.DB.QueryRowContext(ctx, "SELECT story_id FROM episodes WHERE id = $1", episodeID).Scan(&storyID)
+
+	_, err = h.DB.ExecContext(ctx, `UPDATE episodes SET status = 'archived', updated_by = $1, updated_at = now() WHERE id = $2`, adminID, episodeID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to archive episode"})
+	}
+
+	// Update story total_episodes count
+	_, _ = h.DB.ExecContext(ctx, "UPDATE stories SET total_episodes = (SELECT COUNT(*) FROM episodes WHERE story_id = $1 AND status = 'published') WHERE id = $1", storyID)
+
+	_, _ = h.DB.ExecContext(ctx, `
+		INSERT INTO admin_audit_logs (admin_user_id, action, entity_type, entity_id, created_at)
+		VALUES ($1, 'delete_episode', 'episodes', $2, now())
+	`, adminID, episodeID)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "archived"})
+}
+
+// GetStoryEpisodes returns episode list with user access status (for mobile app)
+func (h *ContentHandler) GetStoryEpisodes(c echo.Context) error {
+	userID, err := auth.GetUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	slug := c.Param("slug")
+	ctx := c.Request().Context()
+
+	var storyID uuid.UUID
+	err = h.DB.QueryRowContext(ctx, `SELECT id FROM stories WHERE slug = $1 AND status = 'published'`, slug).Scan(&storyID)
+	if err == sql.ErrNoRows {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "story not found"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "database error"})
+	}
+
+	// Check if user has active subscription
+	var hasSubscription bool
+	var subStatus string
+	subErr := h.DB.QueryRowContext(ctx, `SELECT status FROM subscriptions WHERE user_id = $1 AND status = 'active' AND expires_at > now() LIMIT 1`, userID).Scan(&subStatus)
+	hasSubscription = (subErr == nil)
+
+	type EpisodeWithAccess struct {
+		ID                   uuid.UUID  `json:"id"`
+		EpisodeNumber        int        `json:"episode_number"`
+		Title                string     `json:"title"`
+		Slug                 *string    `json:"slug,omitempty"`
+		IsFree               bool       `json:"is_free"`
+		CoinPrice            int        `json:"coin_price"`
+		WordCount            int        `json:"word_count"`
+		EstimatedReadingTime int        `json:"estimated_reading_time"`
+		PublishedAt          *time.Time `json:"published_at,omitempty"`
+		HasAccess            bool       `json:"has_access"`
+		UnlockMethod         string     `json:"unlock_method,omitempty"`
+	}
+
+	episodes := []EpisodeWithAccess{}
+	rows, err := h.DB.QueryContext(ctx, `
+		SELECT id, episode_number, title, slug, is_free, COALESCE(coin_price, 20), word_count, estimated_reading_time, published_at
+		FROM episodes
+		WHERE story_id = $1 AND status = 'published'
+		ORDER BY episode_number ASC
+	`, storyID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "database error"})
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ep EpisodeWithAccess
+		if err := rows.Scan(&ep.ID, &ep.EpisodeNumber, &ep.Title, &ep.Slug, &ep.IsFree, &ep.CoinPrice, &ep.WordCount, &ep.EstimatedReadingTime, &ep.PublishedAt); err == nil {
+			// Determine access
+			if ep.IsFree {
+				ep.HasAccess = true
+				ep.UnlockMethod = "free"
+			} else if hasSubscription {
+				ep.HasAccess = true
+				ep.UnlockMethod = "subscription"
+			} else {
+				// Check if user has unlocked this episode
+				var unlockMethod string
+				unlockErr := h.DB.QueryRowContext(ctx, `SELECT method FROM episode_unlocks WHERE user_id = $1 AND episode_id = $2`, userID, ep.ID).Scan(&unlockMethod)
+				if unlockErr == nil {
+					ep.HasAccess = true
+					ep.UnlockMethod = unlockMethod
+				}
+			}
+			episodes = append(episodes, ep)
+		}
+	}
+
+	return c.JSON(http.StatusOK, episodes)
 }
 
 // Helpers

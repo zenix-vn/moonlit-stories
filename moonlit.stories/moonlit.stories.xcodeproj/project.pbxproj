@@ -29,9 +29,22 @@
 		54413D8A2FC8165900A17A69 /* moonlit.storiesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = moonlit.storiesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		54413DB12FC8165900A17A69 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 54413D702FC8165700A17A69 /* moonlit.stories */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		54413D732FC8165700A17A69 /* moonlit.stories */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				54413DB12FC8165900A17A69 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = moonlit.stories;
 			sourceTree = "<group>";
 		};
@@ -400,14 +413,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = A759U6QWJ9;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Moonlit Stories";
-				INFOPLIST_KEY_NSUserNotificationsUsageDescription = "Moonlit Stories would like to send you bedtime story reminders and new release alerts.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
+				INFOPLIST_FILE = "moonlit.stories/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -438,14 +446,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = A759U6QWJ9;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Moonlit Stories";
-				INFOPLIST_KEY_NSUserNotificationsUsageDescription = "Moonlit Stories would like to send you bedtime story reminders and new release alerts.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
+				INFOPLIST_FILE = "moonlit.stories/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

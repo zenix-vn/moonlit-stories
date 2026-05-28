@@ -133,6 +133,30 @@ export const api = {
     });
   },
 
+  publishStory: async (id: string, status: "published" | "draft" | "archived" = "published") => {
+    return apiFetch(`/admin/stories/${id}/publish`, {
+      method: "PATCH",
+      json: { status },
+    });
+  },
+
+  deleteStory: async (id: string) => {
+    return apiFetch(`/admin/stories/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  getStoryGenresMoods: async (id: string) => {
+    return apiFetch(`/admin/stories/${id}/genres-moods`);
+  },
+
+  updateStoryGenresMoods: async (id: string, genreIds: string[], moodIds: string[]) => {
+    return apiFetch(`/admin/stories/${id}/genres-moods`, {
+      method: "PUT",
+      json: { genre_ids: genreIds, mood_ids: moodIds },
+    });
+  },
+
   // Episodes CRUD
   listEpisodes: async (storyId: string) => {
     return apiFetch(`/admin/stories/${storyId}/episodes`);
@@ -156,20 +180,35 @@ export const api = {
     });
   },
 
+  deleteEpisode: async (id: string) => {
+    return apiFetch(`/admin/episodes/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   // Banners
   listBanners: async () => {
-    // Fallback Mock Banners since GET /admin/banners routes might require complete setup
-    return apiFetch("/admin/banners").catch(() => [
-      { id: "b1", title: "New Release: Villain Queen", placement: "home_top", active: true, priority: 5, image_url: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=400" },
-      { id: "b2", title: "Coin Sale: 20% Off Bundle", placement: "home_mid", active: true, priority: 3, image_url: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=400" },
-    ]);
+    return apiFetch("/admin/banners");
   },
 
   createBanner: async (banner: any) => {
     return apiFetch("/admin/banners", {
       method: "POST",
       json: banner,
-    }).catch(() => ({ status: "created", banner }));
+    });
+  },
+
+  updateBanner: async (id: string, banner: any) => {
+    return apiFetch(`/admin/banners/${id}`, {
+      method: "PATCH",
+      json: banner,
+    });
+  },
+
+  deleteBanner: async (id: string) => {
+    return apiFetch(`/admin/banners/${id}`, {
+      method: "DELETE",
+    });
   },
 
   // App Config & Feature Flags

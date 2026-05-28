@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State  private var splashDone      = false
     @State  private var onboardingDone  = false
-    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
+    @AppStorage("onboardingShownOnce") private var onboardingShownOnce = false
 
     var body: some View {
         ZStack {
@@ -12,13 +12,11 @@ struct ContentView: View {
                     .transition(.opacity)
                     .zIndex(3)
 
-            } else if !onboardingCompleted && !onboardingDone {
+            } else if !onboardingShownOnce && !onboardingDone {
                 OnboardingView(isFinished: $onboardingDone)
                     .transition(.opacity)
                     .zIndex(2)
-                    .onChange(of: onboardingDone) { _, finished in
-                        if finished { onboardingCompleted = true }
-                    }
+                    .onAppear { onboardingShownOnce = true }
 
             } else {
                 HomeView()
