@@ -158,9 +158,28 @@ struct SplashView: View {
             dotsOpacity = 1
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) {
-            withAnimation(.easeInOut(duration: 0.55)) {
-                isFinished = true
+        Task {
+            let startTime = Date()
+            
+            // Perform guest login authentication in the background
+            do {
+                _ = try await NetworkService.shared.authenticateGuest()
+                print("Guest authentication successful!")
+            } catch {
+                print("Guest authentication failed: \(error)")
+                // Do not block app transition on authentication error;
+                // HomeView's network retrieval will handle error and retry states.
+            }
+            
+            let elapsed = Date().timeIntervalSince(startTime)
+            let remaining = max(0, 2.8 - elapsed)
+            
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.55)) {
+                    isFinished = true
+                }
             }
         }
     }

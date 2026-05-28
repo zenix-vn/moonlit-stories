@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Theme
+// MARK: - Theme Extension
 extension Color {
     static let mlBg        = Color(red: 0.043, green: 0.024, blue: 0.090)
     static let mlCard      = Color(red: 0.098, green: 0.059, blue: 0.157)
@@ -12,113 +12,35 @@ extension Color {
     static let mlMuted     = Color(white: 0.45)
 }
 
-// MARK: - Models
-struct StoryBook: Identifiable {
-    let id        = UUID()
-    let title:    String
-    let author:   String
-    let genre:    String
-    let rating:   Double
-    let duration: String
-    let topColor: Color
-    let botColor: Color
-    let symbol:   String
-    var isAudio:  Bool = false
-    var isNew:    Bool = false
-    var episodes: Int  = 0
+// Helper to generate consistent gradient colors based on string hash for missing covers
+func getGradientForString(_ str: String) -> (Color, Color) {
+    let hash = abs(str.hashValue)
+    let colors: [(Color, Color)] = [
+        (Color(red: 0.08, green: 0.02, blue: 0.20), Color(red: 0.38, green: 0.12, blue: 0.60)),
+        (Color(red: 0.10, green: 0.02, blue: 0.08), Color(red: 0.52, green: 0.10, blue: 0.25)),
+        (Color(red: 0.05, green: 0.04, blue: 0.18), Color(red: 0.15, green: 0.20, blue: 0.60)),
+        (Color(red: 0.08, green: 0.04, blue: 0.16), Color(red: 0.36, green: 0.10, blue: 0.50)),
+        (Color(red: 0.10, green: 0.02, blue: 0.06), Color(red: 0.50, green: 0.08, blue: 0.20))
+    ]
+    return colors[hash % colors.count]
 }
 
-struct StoryGenre: Identifiable {
-    let id   = UUID()
-    let name:  String
-    let icon:  String
+// MARK: - Story Genres
+struct LocalGenre: Identifiable {
+    let id = UUID()
+    let name: String
+    let icon: String
     let color: Color
 }
 
-// MARK: - Data
 enum ML {
-    static let genres: [StoryGenre] = [
-        StoryGenre(name: "All",      icon: "square.grid.2x2.fill", color: Color.mlPurple),
-        StoryGenre(name: "Luna",     icon: "moon.stars.fill",       color: Color(red: 0.70, green: 0.40, blue: 1.00)),
-        StoryGenre(name: "Alpha",    icon: "pawprint.fill",         color: Color(red: 0.90, green: 0.30, blue: 0.40)),
-        StoryGenre(name: "Mate",     icon: "heart.fill",            color: Color.mlPink),
-        StoryGenre(name: "Rejected", icon: "heart.slash.fill",      color: Color(red: 0.75, green: 0.20, blue: 0.45)),
-        StoryGenre(name: "Omega",    icon: "sparkles",              color: Color(red: 0.40, green: 0.65, blue: 1.00)),
-    ]
-
-    static let featured: [StoryBook] = [
-        StoryBook(title: "True Luna: Chasing The White Wolf",
-                  author: "Tessa Lily",    genre: "Luna",
-                  rating: 4.9, duration: "30m",
-                  topColor: Color(red: 0.08, green: 0.02, blue: 0.20),
-                  botColor: Color(red: 0.38, green: 0.12, blue: 0.60),
-                  symbol: "moon.stars.fill", isAudio: true, episodes: 376),
-        StoryBook(title: "The Alpha King's Chosen Mate",
-                  author: "Rose Midnight", genre: "Alpha",
-                  rating: 4.8, duration: "45m",
-                  topColor: Color(red: 0.10, green: 0.02, blue: 0.08),
-                  botColor: Color(red: 0.52, green: 0.10, blue: 0.25),
-                  symbol: "crown.fill", isAudio: true, episodes: 203),
-        StoryBook(title: "Rejected by the Alpha, Loved by the Moon",
-                  author: "Luna Storm",    genre: "Rejected",
-                  rating: 4.7, duration: "1h",
-                  topColor: Color(red: 0.05, green: 0.04, blue: 0.18),
-                  botColor: Color(red: 0.15, green: 0.20, blue: 0.60),
-                  symbol: "heart.slash.circle.fill", episodes: 156),
-    ]
-
-    static let popular: [StoryBook] = [
-        StoryBook(title: "Alpha's Dark Desire",
-                  author: "Aria Night",  genre: "Alpha",
-                  rating: 4.9, duration: "2h 30m",
-                  topColor: Color(red: 0.08, green: 0.02, blue: 0.18),
-                  botColor: Color(red: 0.42, green: 0.12, blue: 0.62),
-                  symbol: "crown.fill", isAudio: true),
-        StoryBook(title: "The Beta's Forbidden Mate",
-                  author: "Maya Wolf",   genre: "Mate",
-                  rating: 4.7, duration: "1h 45m",
-                  topColor: Color(red: 0.04, green: 0.05, blue: 0.18),
-                  botColor: Color(red: 0.10, green: 0.22, blue: 0.62),
-                  symbol: "heart.fill", isAudio: true),
-        StoryBook(title: "Moon Goddess's Blessed",
-                  author: "Sky Silver",  genre: "Luna",
-                  rating: 4.8, duration: "3h",
-                  topColor: Color(red: 0.10, green: 0.05, blue: 0.18),
-                  botColor: Color(red: 0.46, green: 0.15, blue: 0.56),
-                  symbol: "moon.circle.fill"),
-        StoryBook(title: "Rejected Luna's Revenge",
-                  author: "Eve Dark",    genre: "Rejected",
-                  rating: 4.6, duration: "2h",
-                  topColor: Color(red: 0.12, green: 0.03, blue: 0.08),
-                  botColor: Color(red: 0.56, green: 0.12, blue: 0.28),
-                  symbol: "flame.fill"),
-    ]
-
-    static let newReleases: [StoryBook] = [
-        StoryBook(title: "Lycan's Chosen",
-                  author: "Nina Moon",   genre: "Mate",
-                  rating: 4.5, duration: "1h 20m",
-                  topColor: Color(red: 0.08, green: 0.04, blue: 0.16),
-                  botColor: Color(red: 0.36, green: 0.10, blue: 0.50),
-                  symbol: "sparkles", isNew: true),
-        StoryBook(title: "The Last Omega Wolf",
-                  author: "Zara Fox",    genre: "Luna",
-                  rating: 4.6, duration: "50m",
-                  topColor: Color(red: 0.05, green: 0.02, blue: 0.14),
-                  botColor: Color(red: 0.30, green: 0.08, blue: 0.48),
-                  symbol: "star.fill", isNew: true),
-        StoryBook(title: "Alpha's Forbidden Claim",
-                  author: "Rex Stone",   genre: "Alpha",
-                  rating: 4.8, duration: "2h",
-                  topColor: Color(red: 0.10, green: 0.02, blue: 0.06),
-                  botColor: Color(red: 0.50, green: 0.08, blue: 0.20),
-                  symbol: "lock.fill", isNew: true),
-        StoryBook(title: "Howling at Midnight",
-                  author: "Vera Night",  genre: "Mate",
-                  rating: 4.4, duration: "1h 10m",
-                  topColor: Color(red: 0.06, green: 0.04, blue: 0.14),
-                  botColor: Color(red: 0.28, green: 0.12, blue: 0.45),
-                  symbol: "moon.fill", isNew: true),
+    static let genres: [LocalGenre] = [
+        LocalGenre(name: "All",      icon: "square.grid.2x2.fill", color: Color.mlPurple),
+        LocalGenre(name: "Luna",     icon: "moon.stars.fill",       color: Color(red: 0.70, green: 0.40, blue: 1.00)),
+        LocalGenre(name: "Alpha",    icon: "pawprint.fill",         color: Color(red: 0.90, green: 0.30, blue: 0.40)),
+        LocalGenre(name: "Mate",     icon: "heart.fill",            color: Color.mlPink),
+        LocalGenre(name: "Rejected", icon: "heart.slash.fill",      color: Color(red: 0.75, green: 0.20, blue: 0.45)),
+        LocalGenre(name: "Omega",    icon: "sparkles",              color: Color(red: 0.40, green: 0.65, blue: 1.00)),
     ]
 }
 
@@ -148,6 +70,7 @@ struct HomeView: View {
 
 // MARK: - Main Home Tab
 struct MainHomeTab: View {
+    @StateObject private var viewModel = HomeViewModel()
     @State private var genre = "All"
 
     var body: some View {
@@ -173,25 +96,83 @@ struct MainHomeTab: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     Color.clear.frame(height: 90)
-                    VStack(spacing: 26) {
-                        HeroBanner()
-                        GenrePills(selected: $genre)
-                        FeaturedCarousel()
-                        PopularSection()
-                        GenreGrid().padding(.horizontal, 20)
-                        NewReleasesSection()
-                        Color.clear.frame(height: 90)
+                    
+                    if viewModel.isLoading && viewModel.tonightsPicks.isEmpty {
+                        VStack {
+                            ProgressView()
+                                .tint(Color.mlPurple)
+                                .scaleEffect(1.3)
+                                .padding(.bottom, 8)
+                            Text("Loading stories...")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Color.mlSubtext)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 400)
+                    } else if let error = viewModel.errorMessage {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 40))
+                                .foregroundStyle(Color.mlPink)
+                            Text("Oops! Failed to connect to server")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color.white)
+                            Text(error)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.mlSubtext)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                            Button(action: {
+                                Task { await viewModel.loadFeed() }
+                            }) {
+                                Text("Retry")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color.white)
+                                    .padding(.horizontal, 28)
+                                    .padding(.vertical, 12)
+                                    .background(Capsule().fill(Color.mlPurple))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 400)
+                    } else {
+                        VStack(spacing: 26) {
+                            HeroBanner(banner: viewModel.banners.first)
+                            
+                            GenrePills(selected: $genre)
+                            
+                            if !viewModel.continueReading.isEmpty {
+                                ContinueReadingSection(items: viewModel.continueReading)
+                            }
+                            
+                            FeaturedCarousel(stories: viewModel.tonightsPicks)
+                            
+                            PopularSection(stories: viewModel.trendingNow)
+                            
+                            GenreGrid().padding(.horizontal, 20)
+                            
+                            let releases = viewModel.freeEpisodesToday.isEmpty ? viewModel.tonightsPicks : viewModel.freeEpisodesToday
+                            NewReleasesSection(stories: releases)
+                            
+                            Color.clear.frame(height: 90)
+                        }
                     }
                 }
             }
+            .refreshable {
+                await viewModel.loadFeed()
+            }
+            .task {
+                await viewModel.loadFeed()
+            }
 
-            TopNav()
+            TopNav(wallet: viewModel.wallet)
         }
     }
 }
 
 // MARK: - Top Navigation Bar
 struct TopNav: View {
+    let wallet: Wallet?
+    
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -217,6 +198,21 @@ struct TopNav: View {
 
                 Spacer()
 
+                // Coin balance display
+                if let coins = wallet?.coins {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bitcoinsign.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.mlGold)
+                        Text("\(coins)")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.white)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                }
+
                 Button(action: {}) {
                     ZStack {
                         Circle().fill(Color.white.opacity(0.08)).frame(width: 36, height: 36)
@@ -233,7 +229,7 @@ struct TopNav: View {
                                 colors: [Color(red: 0.9, green: 0.5, blue: 0.7), Color.mlPurple],
                                 startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 36, height: 36)
-                        Text("R")
+                        Text("G")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color.white)
                     }
@@ -254,67 +250,123 @@ struct TopNav: View {
 
 // MARK: - Hero Banner
 struct HeroBanner: View {
+    let banner: Banner?
+    
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 24)
-                .fill(LinearGradient(
-                    colors: [
-                        Color(red: 0.08, green: 0.02, blue: 0.22),
-                        Color(red: 0.30, green: 0.08, blue: 0.52),
-                        Color(red: 0.55, green: 0.18, blue: 0.65),
-                    ],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
-
-            GeometryReader { g in
-                Image(systemName: "moon.stars.fill")
-                    .font(.system(size: 110))
-                    .foregroundStyle(Color.white.opacity(0.07))
-                    .position(x: g.size.width * 0.80, y: g.size.height * 0.42)
-
-                Image(systemName: "sparkles")
-                    .font(.system(size: 36))
-                    .foregroundStyle(Color.white.opacity(0.10))
-                    .position(x: g.size.width * 0.65, y: g.size.height * 0.15)
-
-                Image(systemName: "star.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Color.white.opacity(0.12))
-                    .position(x: g.size.width * 0.88, y: g.size.height * 0.72)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("1000+")
-                    .font(.system(size: 38, weight: .black, design: .rounded))
-                    .foregroundStyle(Color.white)
-                Text("Werewolf Novels")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.90))
-                Text("Romance stories · Love episodes")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.white.opacity(0.60))
-
-                Button(action: {}) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Start Reading")
-                            .font(.system(size: 14, weight: .semibold))
+            if let banner = banner {
+                AsyncImage(url: URL(string: banner.imageUrl)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure, .empty:
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.08, green: 0.02, blue: 0.22),
+                                Color(red: 0.30, green: 0.08, blue: 0.52),
+                                Color(red: 0.55, green: 0.18, blue: 0.65),
+                            ],
+                            startPoint: .topLeading, endPoint: .bottomTrailing)
+                    @unknown default:
+                        EmptyView()
                     }
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(LinearGradient(
-                                colors: [Color.mlPurple, Color.mlPurpleDim],
-                                startPoint: .leading, endPoint: .trailing))
-                    )
                 }
-                .padding(.top, 4)
+                .frame(height: 190)
+                .clipped()
+
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.72)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(banner.title)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(2)
+                    
+                    if let subtitle = banner.subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.70))
+                            .lineLimit(1)
+                    }
+
+                    Button(action: {}) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Start Reading")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [Color.mlPurple, Color.mlPurpleDim],
+                                    startPoint: .leading, endPoint: .trailing))
+                        )
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(20)
+            } else {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(LinearGradient(
+                        colors: [
+                            Color(red: 0.08, green: 0.02, blue: 0.22),
+                            Color(red: 0.30, green: 0.08, blue: 0.52),
+                            Color(red: 0.55, green: 0.18, blue: 0.65),
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+
+                GeometryReader { g in
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 110))
+                        .foregroundStyle(Color.white.opacity(0.07))
+                        .position(x: g.size.width * 0.80, y: g.size.height * 0.42)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("1000+")
+                        .font(.system(size: 38, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.white)
+                    Text("Werewolf Novels")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.90))
+                    Text("Romance stories · Love episodes")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.white.opacity(0.60))
+
+                    Button(action: {}) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Start Reading")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [Color.mlPurple, Color.mlPurpleDim],
+                                    startPoint: .leading, endPoint: .trailing))
+                        )
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(20)
             }
-            .padding(20)
         }
         .frame(height: 190)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
         .padding(.horizontal, 20)
     }
@@ -357,27 +409,32 @@ struct GenrePills: View {
 
 // MARK: - Featured Carousel
 struct FeaturedCarousel: View {
+    let stories: [Story]
     @State private var page = 0
 
     var body: some View {
-        VStack(spacing: 10) {
-            SectionHeader(title: "Featured", action: "See all")
-                .padding(.horizontal, 20)
+        if stories.isEmpty {
+            EmptyView()
+        } else {
+            VStack(spacing: 10) {
+                SectionHeader(title: "Featured", action: "See all")
+                    .padding(.horizontal, 20)
 
-            TabView(selection: $page) {
-                ForEach(Array(ML.featured.enumerated()), id: \.element.id) { i, book in
-                    FeaturedCard(book: book).tag(i).padding(.horizontal, 20)
+                TabView(selection: $page) {
+                    ForEach(Array(stories.enumerated()), id: \.element.id) { i, story in
+                        FeaturedCard(story: story).tag(i).padding(.horizontal, 20)
+                    }
                 }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 210)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: 210)
 
-            HStack(spacing: 6) {
-                ForEach(0..<ML.featured.count, id: \.self) { i in
-                    Capsule()
-                        .fill(i == page ? Color.mlPurple : Color.white.opacity(0.25))
-                        .frame(width: i == page ? 20 : 6, height: 6)
-                        .animation(.spring(duration: 0.3), value: page)
+                HStack(spacing: 6) {
+                    ForEach(0..<stories.count, id: \.self) { i in
+                        Capsule()
+                            .fill(i == page ? Color.mlPurple : Color.white.opacity(0.25))
+                            .frame(width: i == page ? 20 : 6, height: 6)
+                            .animation(.spring(duration: 0.3), value: page)
+                    }
                 }
             }
         }
@@ -385,55 +442,69 @@ struct FeaturedCarousel: View {
 }
 
 struct FeaturedCard: View {
-    let book: StoryBook
+    let story: Story
 
     var body: some View {
+        let colors = getGradientForString(story.title)
+        let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
+        let durationStr = "\(1 + abs(story.title.hashValue) % 3)h"
+        
         ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(LinearGradient(
-                    colors: [book.topColor, book.botColor],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
+            if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure, .empty:
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(LinearGradient(
+                                colors: [colors.0, colors.1],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(LinearGradient(
+                        colors: [colors.0, colors.1],
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
 
             GeometryReader { g in
-                Image(systemName: book.symbol)
+                Image(systemName: "sparkles")
                     .font(.system(size: 100))
-                    .foregroundStyle(Color.white.opacity(0.08))
+                    .foregroundStyle(Color.white.opacity(0.04))
                     .position(x: g.size.width * 0.78, y: g.size.height * 0.40)
             }
-
-            if book.isAudio {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Label("AUDIO", systemImage: "headphones")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(Capsule().fill(Color.mlPurple.opacity(0.85)))
-                    }
-                    Spacer()
-                }
-                .padding(14)
-            }
+            
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.72)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(book.genre.uppercased())
+                let genreText = story.genres?.first ?? "Romance"
+                Text(genreText.uppercased())
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Color.mlPurple)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Capsule().fill(Color.mlPurple.opacity(0.18)))
 
-                Text(book.title)
+                Text(story.title)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Color.white)
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
-                    Text(book.author)
+                    Text("Moonlit Author")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.white.opacity(0.65))
-                    if book.episodes > 0 {
-                        Text("· \(book.episodes) eps")
+                    if story.totalEpisodes > 0 {
+                        Text("· \(story.totalEpisodes) eps")
                             .font(.system(size: 11))
                             .foregroundStyle(Color.white.opacity(0.50))
                     }
@@ -444,7 +515,7 @@ struct FeaturedCard: View {
                         Image(systemName: "star.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(Color.mlGold)
-                        Text(String(format: "%.1f", book.rating))
+                        Text(String(format: "%.1f", ratingVal))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color.white)
                     }
@@ -452,15 +523,12 @@ struct FeaturedCard: View {
                         Image(systemName: "clock.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(Color.white.opacity(0.55))
-                        Text(book.duration)
+                        Text(durationStr)
                             .font(.system(size: 11))
                             .foregroundStyle(Color.white.opacity(0.65))
                     }
                     Spacer()
                     HStack(spacing: 8) {
-                        if book.isAudio {
-                            ActionBtn(label: "Listen", icon: "headphones", filled: true)
-                        }
                         ActionBtn(label: "Read", icon: "book.fill", filled: false)
                     }
                 }
@@ -492,16 +560,20 @@ private struct ActionBtn: View {
     }
 }
 
-// MARK: - Popular Audiobooks
-struct PopularSection: View {
+// MARK: - Continue Reading Section
+struct ContinueReadingSection: View {
+    let items: [ContinueReadingItem]
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Popular Audiobooks", action: "See all")
+            SectionHeader(title: "Continue Reading", action: "See all")
                 .padding(.horizontal, 20)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
-                    ForEach(ML.popular) { book in AudioCard(book: book) }
+                    ForEach(items) { item in
+                        ContinueCard(item: item)
+                    }
                 }
                 .padding(.horizontal, 20)
             }
@@ -509,42 +581,134 @@ struct PopularSection: View {
     }
 }
 
+struct ContinueCard: View {
+    let item: ContinueReadingItem
+    
+    var body: some View {
+        let colors = getGradientForString(item.storyTitle)
+        HStack(spacing: 12) {
+            ZStack {
+                if let coverUrl = item.coverUrl, let url = URL(string: coverUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        default:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(LinearGradient(colors: [colors.0, colors.1], startPoint: .top, endPoint: .bottom))
+                        }
+                    }
+                    .frame(width: 50, height: 68)
+                    .cornerRadius(8)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(LinearGradient(colors: [colors.0, colors.1], startPoint: .top, endPoint: .bottom))
+                        .frame(width: 50, height: 68)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.storyTitle)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                
+                Text("Ep \(item.episodeNumber) · \(item.episodeTitle)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.mlSubtext)
+                    .lineLimit(1)
+                
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.12))
+                        Capsule()
+                            .fill(LinearGradient(colors: [Color.mlPurple, Color.mlPink], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: geo.size.width * CGFloat(item.progressPercent / 100.0))
+                    }
+                }
+                .frame(height: 4)
+                .padding(.top, 4)
+            }
+            .frame(width: 140)
+        }
+        .padding(10)
+        .background(Color.mlCard)
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
+    }
+}
+
+// MARK: - Popular Section
+struct PopularSection: View {
+    let stories: [Story]
+    
+    var body: some View {
+        if stories.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader(title: "Popular Stories", action: "See all")
+                    .padding(.horizontal, 20)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(stories) { story in AudioCard(story: story) }
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+        }
+    }
+}
+
 struct AudioCard: View {
-    let book: StoryBook
+    let story: Story
 
     var body: some View {
+        let colors = getGradientForString(story.title)
+        let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
+        let durationStr = "\(1 + abs(story.title.hashValue) % 3)h"
+        
         VStack(alignment: .leading, spacing: 9) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(LinearGradient(
-                        colors: [book.topColor, book.botColor],
-                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 148, height: 176)
-
-                Image(systemName: book.symbol)
-                    .font(.system(size: 52))
-                    .foregroundStyle(Color.white.opacity(0.18))
-
-                if book.isAudio {
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 3) {
-                            ForEach(0..<4, id: \.self) { i in
-                                let heights: [CGFloat] = [12, 20, 16, 10]
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.mlPurple.opacity(0.85))
-                                    .frame(width: 3, height: heights[i])
-                            }
+                if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure, .empty:
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(LinearGradient(
+                                    colors: [colors.0, colors.1],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                        @unknown default:
+                            EmptyView()
                         }
-                        .padding(.bottom, 12)
                     }
                     .frame(width: 148, height: 176)
+                    .cornerRadius(16)
+                } else {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(LinearGradient(
+                            colors: [colors.0, colors.1],
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 148, height: 176)
                 }
+
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.55)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(width: 148, height: 176)
+                .cornerRadius(16)
 
                 VStack {
                     Spacer()
                     HStack {
-                        Label(book.duration, systemImage: book.isAudio ? "headphones" : "book.fill")
+                        Label(durationStr, systemImage: "book.fill")
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Color.white)
                             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -563,23 +727,23 @@ struct AudioCard: View {
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(book.title)
+                Text(story.title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .lineLimit(2)
                     .frame(width: 148, alignment: .leading)
-                Text(book.author)
+                Text("Moonlit Author")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.mlSubtext)
                 HStack(spacing: 4) {
                     Image(systemName: "star.fill")
                         .font(.system(size: 9))
                         .foregroundStyle(Color.mlGold)
-                    Text(String(format: "%.1f", book.rating))
+                    Text(String(format: "%.1f", ratingVal))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white)
                     Text("·").foregroundStyle(Color.mlMuted)
-                    Text(book.genre)
+                    Text(story.genres?.first ?? "Romance")
                         .font(.system(size: 10))
                         .foregroundStyle(Color.mlSubtext)
                 }
@@ -641,41 +805,66 @@ struct GenreGridCell: View {
 
 // MARK: - New Releases
 struct NewReleasesSection: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "New Releases", action: "See all")
-                .padding(.horizontal, 20)
+    let stories: [Story]
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(ML.newReleases) { book in SmallCard(book: book) }
+    var body: some View {
+        if stories.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader(title: "New Releases", action: "See all")
+                    .padding(.horizontal, 20)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(stories) { story in SmallCard(story: story) }
+                    }
+                    .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 20)
             }
         }
     }
 }
 
 struct SmallCard: View {
-    let book: StoryBook
+    let story: Story
 
     var body: some View {
+        let colors = getGradientForString(story.title)
+        let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
+        
         VStack(alignment: .leading, spacing: 7) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(LinearGradient(
-                        colors: [book.topColor, book.botColor],
-                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure, .empty:
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(LinearGradient(
+                                    colors: [colors.0, colors.1],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
                     .frame(width: 108, height: 143)
+                    .cornerRadius(12)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(LinearGradient(
+                            colors: [colors.0, colors.1],
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 108, height: 143)
+                }
 
-                Image(systemName: book.symbol)
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.white.opacity(0.18))
-
-                if book.isNew {
+                if story.isHot || story.isFeatured {
                     VStack {
                         HStack {
-                            Text("NEW")
+                            Text(story.isHot ? "HOT" : "NEW")
                                 .font(.system(size: 8, weight: .black))
                                 .foregroundStyle(Color.white)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
@@ -691,7 +880,7 @@ struct SmallCard: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(book.title)
+                Text(story.title)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .lineLimit(2)
@@ -700,7 +889,7 @@ struct SmallCard: View {
                     Image(systemName: "star.fill")
                         .font(.system(size: 9))
                         .foregroundStyle(Color.mlGold)
-                    Text(String(format: "%.1f", book.rating))
+                    Text(String(format: "%.1f", ratingVal))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white)
                 }
