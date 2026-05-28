@@ -104,7 +104,6 @@ struct Onboarding1PageView: View {
                         .scaledToFill()
                         .frame(width: w, height: h)
                         .opacity(starsOpacity * starsTwinkle)
-                        .ignoresSafeArea()
 
                     // Cloud LEFT
                     Image("SplashCloud")
@@ -149,6 +148,7 @@ struct Onboarding1PageView: View {
                         .position(x: w * 0.50, y: h * 0.54)
                 }
             }
+            .clipped()
 
             // ── Bottom gradient ───────────────────────────────────────────
             LinearGradient(
@@ -168,8 +168,7 @@ struct Onboarding1PageView: View {
                 Image("Ob1Text")
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 340)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 32)
                     .opacity(textOpacity)
                     .offset(y: textY)
 
@@ -195,17 +194,17 @@ struct Onboarding1PageView: View {
                     Image("BtnContinue")
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: 320)
-                        .padding(.horizontal, 28)
                         .shadow(
                             color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.40),
                             radius: 16, x: 0, y: 6)
                 }
+                .padding(.horizontal, 28)
                 .scaleEffect(btnScale)
                 .padding(.top, 22)
                 .padding(.bottom, 52)
                 .opacity(bottomOpacity)
             }
+            .frame(maxWidth: .infinity)
         }
         .onAppear { animateIn() }
         .onChange(of: currentPage) { _, _ in
@@ -382,6 +381,7 @@ struct Onboarding2PageView: View {
                         .position(x: w * 0.80, y: h * 0.38)
                 }
             }
+            .clipped()
 
             // ── Bottom gradient ───────────────────────────────────────────
             LinearGradient(
@@ -449,16 +449,16 @@ struct Onboarding2PageView: View {
                             .font(.custom("Georgia-Bold", size: 19))
                             .foregroundStyle(Color(red: 0.10, green: 0.05, blue: 0.01))
                     }
-                    .frame(maxWidth: 320)
-                    .padding(.horizontal, 28)
                     .shadow(color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.40),
                             radius: 16, x: 0, y: 6)
                 }
+                .padding(.horizontal, 28)
                 .scaleEffect(btnScale)
                 .padding(.top, 22)
                 .padding(.bottom, 52)
                 .opacity(bodyOpacity)
             }
+            .frame(maxWidth: .infinity)
         }
         .onAppear { animateIn(); startLooping() }
         .onChange(of: currentPage) { _, _ in
@@ -593,6 +593,7 @@ struct Onboarding3PageView: View {
                         .position(x: w * 0.82, y: h * 0.45)
                 }
             }
+            .clipped()
             .opacity(illustrationOpacity)
 
             LinearGradient(
@@ -669,8 +670,7 @@ private struct Ob3BottomContent: View {
             Image("Ob3Text")
                 .resizable()
                 .scaledToFit()
-                .frame(maxWidth: 340)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 32)
                 .opacity(titleOpacity)
                 .offset(y: titleOffset)
 
@@ -709,16 +709,16 @@ private struct Ob3BottomContent: View {
                         .font(.custom("Georgia-Bold", size: 19))
                         .foregroundStyle(Color(red: 0.10, green: 0.05, blue: 0.01))
                 }
-                .frame(maxWidth: 320)
-                .padding(.horizontal, 28)
                 .shadow(color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.42),
                         radius: 16, x: 0, y: 6)
             }
+            .padding(.horizontal, 28)
             .scaleEffect(btnScale)
             .padding(.top, 22)
             .padding(.bottom, 52)
             .opacity(bodyOpacity)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
