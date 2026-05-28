@@ -1,0 +1,35 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Xcode / Mac / iOS files
+*.xcuserstate
+xcuserdata/
+derivedData/
+build/
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+backend/api
+backend/main
+
+# Node.js
+node_modules/
+.next/
+dist/
+
+# Env config files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
