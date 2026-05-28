@@ -52,104 +52,108 @@ struct LibraryTabView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.mlBg.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 20) {
+                    Text("Keep track of your favorite werewolf and fantasy novels, reading progress, and finished stories.")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                VStack(spacing: 14) {
-                    Picker("Library Type", selection: $viewModel.selectedType) {
-                        ForEach(LibraryViewModel.LibraryType.allCases) { t in
-                            Text(t.title).tag(t)
+                    if viewModel.isLoading && viewModel.items.isEmpty {
+                        VStack(spacing: 14) {
+                            ProgressView().tint(Color.mlPurple).scaleEffect(1.1)
+                            Text("Loading library...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Color.mlSubtext)
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 16)
-                    .onChange(of: viewModel.selectedType) { _, _ in
-                        Task { await viewModel.load() }
-                    }
-
-                    contentView
-                }
-            }
-            .navigationTitle("Library")
-            .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await viewModel.load()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var contentView: some View {
-        if viewModel.isLoading && viewModel.items.isEmpty {
-            Spacer()
-            ProgressView().tint(Color.mlPurple)
-            Spacer()
-        } else if let err = viewModel.errorMessage {
-            Spacer()
-            VStack(spacing: 10) {
-                Image(systemName: "book.closed.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(Color.mlPink)
-                Text(err)
-                    .foregroundStyle(Color.mlSubtext)
-                    .font(.system(size: 13))
-                    .multilineTextAlignment(.center)
-                Button("Retry") { Task { await viewModel.load() } }
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.mlPurple))
-            }
-            .padding(.horizontal, 20)
-            Spacer()
-        } else if viewModel.items.isEmpty {
-            Spacer()
-            Text("No stories in this list")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.mlSubtext)
-            Spacer()
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.items) { item in
-                        NavigationLink(
-                            destination: StoryDetailView(
-                                story: Story(
-                                    id: item.storyID,
-                                    title: item.title,
-                                    slug: item.slug,
-                                    description: item.description.isEmpty ? nil : item.description,
-                                    hook: nil,
-                                    coverUrl: item.coverURL.isEmpty ? nil : item.coverURL,
-                                    freeEpisodeCount: 0,
-                                    defaultCoinPrice: 0,
-                                    totalEpisodes: 0,
-                                    isFeatured: false,
-                                    isHot: false,
-                                    isEditorPick: false,
-                                    genres: nil,
-                                    moods: nil
-                                )
-                            )
-                        ) {
-                            LibraryStoryRow(item: item, selectedType: viewModel.selectedType)
+                        .frame(maxWidth: .infinity, minHeight: 220)
+                    } else if let err = viewModel.errorMessage {
+                        VStack(spacing: 10) {
+                            Image(systemName: "book.closed.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(Color.mlPink)
+                            Text(err)
+                                .foregroundStyle(Color.mlSubtext)
+                                .font(.system(size: 13))
+                                .multilineTextAlignment(.center)
+                            Button("Retry") { Task { await viewModel.load() } }
+                                .foregroundStyle(Color.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(Color.mlPurple))
                         }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            if viewModel.selectedType == .saved {
-                                Button(role: .destructive) {
-                                    Task { await viewModel.removeSaved(storyID: item.storyID) }
-                                } label: {
-                                    Label("Remove", systemImage: "trash")
+                        .frame(maxWidth: .infinity, minHeight: 220)
+                    } else if viewModel.items.isEmpty {
+                        Text("No stories in this list")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.mlSubtext)
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                    } else {
+                        LazyVStack(spacing: 12) {
+                            ForEach(viewModel.items) { item in
+                                NavigationLink(
+                                    destination: StoryDetailView(
+                                        story: Story(
+                                            id: item.storyID,
+                                            title: item.title,
+                                            slug: item.slug,
+                                            description: item.description.isEmpty ? nil : item.description,
+                                            hook: nil,
+                                            coverUrl: item.coverURL.isEmpty ? nil : item.coverURL,
+                                            freeEpisodeCount: 0,
+                                            defaultCoinPrice: 0,
+                                            totalEpisodes: 0,
+                                            isFeatured: false,
+                                            isHot: false,
+                                            isEditorPick: false,
+                                            genres: nil,
+                                            moods: nil
+                                        )
+                                    )
+                                ) {
+                                    LibraryStoryRow(item: item, selectedType: viewModel.selectedType)
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    if viewModel.selectedType == .saved {
+                                        Button(role: .destructive) {
+                                            Task { await viewModel.removeSaved(storyID: item.storyID) }
+                                        } label: {
+                                            Label("Remove", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+
+                    Spacer().frame(height: 20)
                 }
+                .padding(20)
+            }
+            .background(Color.mlBg.ignoresSafeArea())
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Picker("Library Type", selection: $viewModel.selectedType) {
+                    ForEach(LibraryViewModel.LibraryType.allCases) { t in
+                        Text(t.title).tag(t)
+                    }
+                }
+                .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 20)
+                .padding(.vertical, 10)
+                .background(Color.mlBg)
+                .onChange(of: viewModel.selectedType) { _, _ in
+                    Task { await viewModel.load() }
+                }
             }
             .refreshable {
+                await viewModel.load()
+            }
+            .navigationTitle("Library")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color.mlBg, for: .navigationBar)
+            .task {
                 await viewModel.load()
             }
         }

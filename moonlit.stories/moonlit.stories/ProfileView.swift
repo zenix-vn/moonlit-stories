@@ -6,7 +6,8 @@ struct ProfileView: View {
     @State private var subscriptionDetail: SubscriptionDetail? = nil
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
-    
+    @State private var isShowingCoinShop = false
+
     // Streak / stats (mock data or values based on user profiles)
     @State private var readingHours = 12.4
     @State private var activeStreak = 5
@@ -37,46 +38,49 @@ struct ProfileView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                        
-                        // Header spacer
-                        Spacer().frame(height: 20)
-                        
-                        // LOADING / PROFILE MAIN CONTENT
-                        if isLoading {
-                            VStack(spacing: 16) {
-                                ProgressView()
-                                    .tint(Color.mlPurple)
-                                    .scaleEffect(1.2)
-                                Text("Loading profile...")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(Color.mlSubtext)
+                            
+                            // Header spacer
+                            Spacer().frame(height: 20)
+                            
+                            // LOADING / PROFILE MAIN CONTENT
+                            if isLoading {
+                                VStack(spacing: 16) {
+                                    ProgressView()
+                                        .tint(Color.mlPurple)
+                                        .scaleEffect(1.2)
+                                    Text("Loading profile...")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(Color.mlSubtext)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 400)
+                            } else {
+                                VStack(spacing: 24) {
+                                    // User Identity Card
+                                    UserHeaderView(
+                                        user: meResponse?.user,
+                                        profile: meResponse?.profile,
+                                        isSubscribed: isSubscribed
+                                    )
+                                    
+                                    // Wallet Card (Coins, Gems, Passes)
+                                    WalletStatusCard(wallet: meResponse?.wallet) {
+                                        isShowingCoinShop = true
+                                    }
+                                    
+                                    // Stats Grid
+                                    StatsGridView(
+                                        readingHours: readingHours,
+                                        activeStreak: activeStreak,
+                                        episodesUnlocked: episodesUnlocked
+                                    )
+                                    
+                                    // Menu Options List
+                                    ProfileMenuList(isSubscribed: isSubscribed) {
+                                        isShowingCoinShop = true
+                                    }
+                                }
                             }
-                            .frame(maxWidth: .infinity, minHeight: 400)
-                        } else {
-                            VStack(spacing: 24) {
-                                // User Identity Card
-                                UserHeaderView(
-                                    user: meResponse?.user,
-                                    profile: meResponse?.profile,
-                                    isSubscribed: isSubscribed
-                                )
-                                
-                                // Wallet Card (Coins, Gems, Passes)
-                                WalletStatusCard(wallet: meResponse?.wallet)
-                                
-                                // Stats Grid
-                                StatsGridView(
-                                    readingHours: readingHours,
-                                    activeStreak: activeStreak,
-                                    episodesUnlocked: episodesUnlocked
-                                )
-                                
-                                // Menu Options List
-                                ProfileMenuList(isSubscribed: isSubscribed)
-                            }
-                        }
-                        
-                        Color.clear.frame(height: 80)
+                            
                     }
                     .padding(.horizontal, 20)
                 }
@@ -85,9 +89,17 @@ struct ProfileView: View {
                 }
             }
             .navigationBarHidden(true)
+            .navigationDestination(isPresented: $isShowingCoinShop) {
+                CoinShopView()
+            }
         }
         .task {
             await loadProfileData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WalletBalanceChanged"))) { _ in
+            Task {
+                await loadProfileData()
+            }
         }
     }
     
@@ -103,10 +115,11 @@ struct ProfileView: View {
                 self.isSubscribed = sub.isSubscribed
                 self.subscriptionDetail = sub.subscription
                 
-                // Set mock values for demonstration
-                self.readingHours = 8.0 + Double(abs(me.user.id.hashValue) % 15) + (Double(abs(me.user.level) % 10) / 10.0)
-                self.activeStreak = 2 + (abs(me.user.id.hashValue) % 10)
-                self.episodesUnlocked = 12 + (abs(me.user.level * 4) % 40)
+                if let stats = me.stats {
+                    self.readingHours = stats.readingHours
+                    self.activeStreak = stats.activeStreak
+                    self.episodesUnlocked = stats.episodesUnlocked
+                }
                 
                 self.isLoading = false
             }
@@ -212,6 +225,7 @@ struct UserHeaderView: View {
 
 struct WalletStatusCard: View {
     let wallet: Wallet?
+    let onTopUpTapped: () -> Void
     
     var body: some View {
         VStack(spacing: 16) {
@@ -226,9 +240,7 @@ struct WalletStatusCard: View {
                 }
                 Spacer()
                 
-                Button(action: {
-                    // Navigate to shop / buy coins
-                }) {
+                Button(action: onTopUpTapped) {
                     HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill")
                         Text("Top Up")
@@ -372,25 +384,32 @@ struct StatCell: View {
 
 struct ProfileMenuList: View {
     let isSubscribed: Bool
+    let onBuyCoinsTapped: () -> Void
     
     var body: some View {
         VStack(spacing: 1) {
             
             // Link to Coin shop
-            ProfileMenuRow(
-                icon: "cart.fill",
-                color: Color.mlGold,
-                title: "Buy Coins & Passes"
-            )
+            Button(action: onBuyCoinsTapped) {
+                ProfileMenuRow(
+                    icon: "cart.fill",
+                    color: Color.mlGold,
+                    title: "Buy Coins & Passes"
+                )
+            }
+            .buttonStyle(.plain)
             
             Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             
             // Check-in check
-            ProfileMenuRow(
-                icon: "calendar.badge.clock",
-                color: Color.mlPink,
-                title: "Daily Rewards & Check-in"
-            )
+            NavigationLink(destination: DailyRewardsView()) {
+                ProfileMenuRow(
+                    icon: "calendar.badge.clock",
+                    color: Color.mlPink,
+                    title: "Daily Rewards & Check-in"
+                )
+            }
+            .buttonStyle(.plain)
             
             Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             
@@ -407,11 +426,14 @@ struct ProfileMenuList: View {
             Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             
             // Help & feedback
-            ProfileMenuRow(
-                icon: "questionmark.bubble.fill",
-                color: Color(red: 0.2, green: 0.8, blue: 0.5),
-                title: "Help & Feedback"
-            )
+            NavigationLink(destination: HelpFeedbackView()) {
+                ProfileMenuRow(
+                    icon: "questionmark.bubble.fill",
+                    color: Color(red: 0.2, green: 0.8, blue: 0.5),
+                    title: "Help & Feedback"
+                )
+            }
+            .buttonStyle(.plain)
         }
         .background(RoundedRectangle(cornerRadius: 20).fill(Color.mlCard))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -453,3 +475,4 @@ struct ProfileMenuRow: View {
 #Preview {
     ProfileView()
 }
+

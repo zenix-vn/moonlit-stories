@@ -56,7 +56,6 @@ struct StoryDetailView: View {
 
     @State private var viewModel = StoryDetailViewModel()
     @State private var selectedEpisode: EpisodeMeta? = nil
-    @State private var showUnlockSheet = false
     @State private var unlockTarget: EpisodeMeta? = nil
     @Environment(\.dismiss) private var dismiss
 
@@ -94,12 +93,15 @@ struct StoryDetailView: View {
             }
         }
         .navigationBarHidden(true)
-        .sheet(isPresented: $showUnlockSheet) {
-            if let ep = unlockTarget {
-                UnlockEpisodeSheet(episode: ep, storyTitle: story.title)
-                    .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
+        .sheet(item: $unlockTarget) { ep in
+            UnlockEpisodeSheet(episode: ep, storyTitle: story.title) {
+                Task {
+                    await viewModel.loadEpisodes(slug: story.slug)
+                    selectedEpisode = ep
+                }
             }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
         .task {
             await viewModel.loadEpisodes(slug: story.slug)
@@ -205,8 +207,10 @@ struct StoryDetailView: View {
                 Button(action: {
                     if let ep = firstAccessible {
                         selectedEpisode = ep
-                    } else if let ep = viewModel.episodes.first {
+                    } else if let ep = viewModel.episodes.first(where: { $0.isFree }) {
                         selectedEpisode = ep
+                    } else if let ep = viewModel.episodes.first {
+                        unlockTarget = ep
                     }
                 }) {
                     HStack(spacing: 8) {
@@ -300,7 +304,6 @@ struct StoryDetailView: View {
                                     selectedEpisode = ep
                                 } else {
                                     unlockTarget = ep
-                                    showUnlockSheet = true
                                 }
                             }
                         )
@@ -462,7 +465,12 @@ struct EpisodeRowSkeleton: View {
 struct UnlockEpisodeSheet: View {
     let episode: EpisodeMeta
     let storyTitle: String
+    var onUnlocked: () -> Void
     @Environment(\.dismiss) private var dismiss
+    
+    @State private var showingShopSheet = false
+    @State private var isUnlocking = false
+    @State private var errorMessage: String? = nil
 
     var body: some View {
         ZStack {
@@ -475,9 +483,13 @@ struct UnlockEpisodeSheet: View {
                         Circle()
                             .fill(LinearGradient(colors: [Color.mlPurple.opacity(0.3), Color.mlPink.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 64, height: 64)
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(Color.mlPurple)
+                        if isUnlocking {
+                            ProgressView().tint(Color.mlPurple)
+                        } else {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(Color.mlPurple)
+                        }
                     }
                     .padding(.top, 28)
 
@@ -490,6 +502,15 @@ struct UnlockEpisodeSheet: View {
                         .foregroundStyle(Color.mlSubtext)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
+                    
+                    if let err = errorMessage {
+                        Text(err)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.mlPink)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 4)
+                    }
                 }
                 .padding(.bottom, 24)
 
@@ -503,7 +524,28 @@ struct UnlockEpisodeSheet: View {
                         title: "Use \(episode.coinPrice) Coins",
                         subtitle: "Instant access, yours forever",
                         badge: nil,
-                        action: { dismiss() }
+                        action: {
+                            Task {
+                                isUnlocking = true
+                                errorMessage = nil
+                                do {
+                                    let res = try await NetworkService.shared.unlockEpisodeWithCoins(episodeId: episode.id)
+                                    if res.status == "unlocked" || res.status == "already_unlocked" {
+                                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                                        onUnlocked()
+                                        dismiss()
+                                    }
+                                } catch {
+                                    let errMsg = error.localizedDescription
+                                    if errMsg.localizedCaseInsensitiveContains("insufficient") {
+                                        showingShopSheet = true
+                                    } else {
+                                        errorMessage = errMsg
+                                    }
+                                }
+                                isUnlocking = false
+                            }
+                        }
                     )
                     Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
 
@@ -513,7 +555,23 @@ struct UnlockEpisodeSheet: View {
                         title: "Watch an Ad",
                         subtitle: "Free access for 24 hours",
                         badge: "FREE",
-                        action: { dismiss() }
+                        action: {
+                            Task {
+                                isUnlocking = true
+                                errorMessage = nil
+                                do {
+                                    let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: episode.id)
+                                    if res.status == "unlocked" || res.status == "already_unlocked" {
+                                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                                        onUnlocked()
+                                        dismiss()
+                                    }
+                                } catch {
+                                    errorMessage = error.localizedDescription
+                                }
+                                isUnlocking = false
+                            }
+                        }
                     )
                     Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
 
@@ -523,7 +581,23 @@ struct UnlockEpisodeSheet: View {
                         title: "Use Free Pass",
                         subtitle: "You have 0 free passes",
                         badge: nil,
-                        action: { dismiss() }
+                        action: {
+                            Task {
+                                isUnlocking = true
+                                errorMessage = nil
+                                do {
+                                    let res = try await NetworkService.shared.unlockEpisodeWithFreePass(episodeId: episode.id)
+                                    if res.status == "unlocked" || res.status == "already_unlocked" {
+                                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                                        onUnlocked()
+                                        dismiss()
+                                    }
+                                } catch {
+                                    errorMessage = error.localizedDescription
+                                }
+                                isUnlocking = false
+                            }
+                        }
                     )
                     Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
 
@@ -533,10 +607,13 @@ struct UnlockEpisodeSheet: View {
                         title: "MoonPass Subscription",
                         subtitle: "Unlimited access · All stories",
                         badge: "BEST VALUE",
-                        action: { dismiss() }
+                        action: {
+                            showingShopSheet = true
+                        }
                     )
                 }
                 .padding(.bottom, 8)
+                .disabled(isUnlocking)
 
                 Button(action: { dismiss() }) {
                     Text("Maybe Later")
@@ -547,6 +624,11 @@ struct UnlockEpisodeSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingShopSheet) {
+            NavigationStack {
+                CoinShopView()
+            }
+        }
     }
 }
 

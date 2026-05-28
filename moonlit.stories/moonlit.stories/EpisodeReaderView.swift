@@ -21,6 +21,48 @@ class EpisodeReaderViewModel {
         }
         isLoading = false
     }
+
+    @ObservationIgnored var isInsufficientCoins = false
+
+    func unlockWithCoins(id: String) async -> Bool {
+        guard !isLoading else { return false }
+        isLoading = true
+        errorMessage = nil
+        isInsufficientCoins = false
+        var success = false
+        do {
+            let res = try await NetworkService.shared.unlockEpisodeWithCoins(episodeId: id)
+            if res.status == "unlocked" || res.status == "already_unlocked" {
+                NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                episode = try await NetworkService.shared.fetchEpisodeDetail(episodeId: id)
+                success = true
+            }
+        } catch {
+            let errMsg = error.localizedDescription
+            errorMessage = errMsg
+            if errMsg.localizedCaseInsensitiveContains("insufficient") {
+                isInsufficientCoins = true
+            }
+        }
+        isLoading = false
+        return success
+    }
+
+    func unlockWithAd(id: String) async {
+        guard !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        do {
+            let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: id)
+            if res.status == "unlocked" || res.status == "already_unlocked" {
+                NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                episode = try await NetworkService.shared.fetchEpisodeDetail(episodeId: id)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
 }
 
 // MARK: - Reading Settings
@@ -42,7 +84,7 @@ struct EpisodeReaderView: View {
     @State private var audioPlayer = AudioPlayerManager()
     @State private var showTopBar = true
     @State private var showSettings = false
-    @State private var scrollOffset: CGFloat = 0
+    @State private var readerScrollRef = ReaderScrollRef()
     @State private var contentHeight: CGFloat = 0
     @State private var viewportHeight: CGFloat = 0
     @State private var nextEpisode: EpisodeMeta? = nil
@@ -52,6 +94,8 @@ struct EpisodeReaderView: View {
     @State private var readingSessionStartedAt: Date? = nil
     @State private var readingProgressStart: Double = 0
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("autoUnlockEpisodes") private var autoUnlockEpisodes = false
+    @State private var showingShopSheet = false
 
     // Floating audio bubble
     @State private var bubblePos: CGPoint = .zero          // set on appear
@@ -116,11 +160,17 @@ struct EpisodeReaderView: View {
                 }
                 .coordinateSpace(name: "scroll")
                 .onPreferenceChange(ScrollOffsetKey.self) { val in
-                    let threshold: CGFloat = -60
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showTopBar = val > threshold
+                    // Direction-based: dùng ref class tránh vấn đề @State capture
+                    let delta = val - readerScrollRef.offset
+                    readerScrollRef.offset = val
+                    if val > -40 {
+                        if !showTopBar { withAnimation(.easeInOut(duration: 0.25)) { showTopBar = true } }
+                    } else if abs(delta) > 6 {
+                        let shouldShow = delta > 0
+                        if shouldShow != showTopBar {
+                            withAnimation(.easeInOut(duration: 0.25)) { showTopBar = shouldShow }
+                        }
                     }
-                    // Update reading progress
                     let scrolled = -val
                     let total = max(1, contentHeight - outer.size.height)
                     viewModel.readProgress = min(1.0, max(0, scrolled / total))
@@ -168,10 +218,16 @@ struct EpisodeReaderView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if showTopBar {
+            // ZStack keeps constant height so safe area never changes (avoids scroll-jump bug)
+            ZStack {
                 readerTopBar
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .opacity(showTopBar ? 1 : 0)
+                    .allowsHitTesting(showTopBar)
+                readerCompactTopBar
+                    .opacity(showTopBar ? 0 : 1)
+                    .allowsHitTesting(!showTopBar)
             }
+            .animation(.easeInOut(duration: 0.25), value: showTopBar)
         }
         .task {
             await loadAndSyncEpisode(id: activeEpisodeId)
@@ -188,6 +244,12 @@ struct EpisodeReaderView: View {
             Task { await finalizeReadingSession() }
             audioPlayer.stop()
         }
+        .sheet(isPresented: $showingShopSheet) {
+            NavigationStack {
+                CoinShopView()
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
     }
 
     // MARK: - Components
@@ -253,6 +315,50 @@ struct EpisodeReaderView: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 12)
+        .background {
+            Rectangle()
+                .fill(settings.isDarkMode ? .ultraThinMaterial : .regularMaterial)
+                .environment(\.colorScheme, settings.isDarkMode ? .dark : .light)
+        }
+    }
+
+    private var readerCompactTopBar: some View {
+        HStack {
+            Spacer()
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) { showTopBar = true }
+            } label: {
+                HStack(spacing: 6) {
+                    if let ep = viewModel.episode {
+                        Text("Ep \(ep.episodeNumber)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.mlPurple)
+                        Text("·")
+                            .font(.system(size: 12))
+                            .foregroundStyle(subtextColor)
+                        Text(ep.title)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(textColor)
+                            .lineLimit(1)
+                    } else {
+                        Image(systemName: "book.pages")
+                            .font(.system(size: 13))
+                            .foregroundStyle(subtextColor)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(settings.isDarkMode ? Color.white.opacity(0.10) : Color.black.opacity(0.07))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+                )
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 8)
         .background {
             Rectangle()
                 .fill(settings.isDarkMode ? .ultraThinMaterial : .regularMaterial)
@@ -353,7 +459,14 @@ struct EpisodeReaderView: View {
             }
 
             HStack(spacing: 12) {
-                Button(action: {}) {
+                Button(action: {
+                    Task {
+                        let success = await viewModel.unlockWithCoins(id: ep.id)
+                        if !success && viewModel.isInsufficientCoins {
+                            showingShopSheet = true
+                        }
+                    }
+                }) {
                     HStack(spacing: 6) {
                         Image(systemName: "bitcoinsign.circle.fill")
                             .font(.system(size: 14))
@@ -372,7 +485,11 @@ struct EpisodeReaderView: View {
                     )
                 }
 
-                Button(action: {}) {
+                Button(action: {
+                    Task {
+                        await viewModel.unlockWithAd(id: ep.id)
+                    }
+                }) {
                     HStack(spacing: 6) {
                         Image(systemName: "play.rectangle.fill")
                             .font(.system(size: 13))
@@ -747,6 +864,12 @@ struct EpisodeReaderView: View {
         await finalizeReadingSession()
         audioPlayer.stop()
         await viewModel.loadEpisode(id: id)
+        
+        // Auto-unlock check
+        if let ep = viewModel.episode, !ep.hasAccess, !ep.isFree, autoUnlockEpisodes {
+            await viewModel.unlockWithCoins(id: ep.id)
+        }
+        
         updateNavEpisodes()
         await beginReadingSessionIfPossible()
         if let ep = viewModel.episode, let url = ep.audioUrl {
@@ -812,6 +935,11 @@ struct EpisodeReaderView: View {
         readingSessionStartedAt = nil
         readingProgressStart = 0
     }
+}
+
+// Ref class để track scroll offset mà không trigger SwiftUI re-render
+private final class ReaderScrollRef {
+    var offset: CGFloat = 0
 }
 
 // MARK: - Scroll Offset Preference Key

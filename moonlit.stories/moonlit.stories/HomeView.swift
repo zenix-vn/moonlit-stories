@@ -351,10 +351,12 @@ struct TopNav: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .background {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .environment(\.colorScheme, .dark)
-                    .ignoresSafeArea(edges: .top)
+                LinearGradient(
+                    colors: [Color.mlBg, Color.mlBg.opacity(0.85), Color.mlBg.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .top)
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)

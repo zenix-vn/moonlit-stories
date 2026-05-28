@@ -58,39 +58,8 @@ struct SettingsView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
             
-            VStack(spacing: 0) {
-                // Header Bar
-                HStack {
-                    Button(action: { dismiss() }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Back")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        .foregroundStyle(Color.mlPurple)
-                    }
-                    
-                    Spacer()
-                    
-                    Text("Settings")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .padding(.trailing, 40) // Balance back button spacer
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .background(
-                    Rectangle()
-                        .fill(Color.mlBg.opacity(0.7))
-                        .background(.ultraThinMaterial)
-                        .ignoresSafeArea(edges: .top)
-                )
-                
-                ScrollView {
-                    VStack(spacing: 24) {
+            ScrollView {
+                VStack(spacing: 24) {
                         
                         // SECTION 1: ACCOUNT SETTINGS
                         SettingsSectionHeader(title: "Account Settings", icon: "person.circle.fill")
@@ -101,10 +70,33 @@ struct SettingsView: View {
                             CustomTextField(label: "Bio", placeholder: "Tell stories about yourself...", text: $bio)
                             
                             Button(action: {
-                                // Simulate saving details
-                                withAnimation {
-                                    successMessage = "Profile updated successfully!"
-                                    isShowingSuccessAlert = true
+                                Task {
+                                    do {
+                                        let prefs = ReaderPreferences(
+                                            fontSize: readerFontSize,
+                                            fontName: readerFontName,
+                                            theme: readerTheme,
+                                            autoUnlockEpisodes: autoUnlockEpisodes,
+                                            audioPlaybackSpeed: audioPlaybackSpeed,
+                                            pushNotificationsEnabled: pushNotificationsEnabled,
+                                            dailyReadingReminder: dailyReadingReminder
+                                        )
+                                        _ = try await NetworkService.shared.updateMe(
+                                            displayName: displayName.isEmpty ? nil : displayName,
+                                            email: email.isEmpty ? nil : email,
+                                            bio: bio.isEmpty ? nil : bio,
+                                            preferences: prefs
+                                        )
+                                        await MainActor.run {
+                                            successMessage = "Settings saved to cloud!"
+                                            isShowingSuccessAlert = true
+                                        }
+                                    } catch {
+                                        await MainActor.run {
+                                            successMessage = "Failed to save: \(error.localizedDescription)"
+                                            isShowingSuccessAlert = true
+                                        }
+                                    }
                                 }
                             }) {
                                 Text("Save Changes")
@@ -328,9 +320,10 @@ struct SettingsView: View {
                     }
                     .padding(20)
                 }
-            }
         }
         .preferredColorScheme(.dark)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .alert("Clear Cache?", isPresented: $isShowingClearCacheAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Clear All", role: .destructive) {
@@ -372,6 +365,30 @@ struct SettingsView: View {
                         }
                         if let bio = me.profile?.bio {
                             self.bio = bio
+                        }
+                        // Sync preferences from cloud database
+                        if let prefs = me.profile?.readingPreference {
+                            if let fSize = prefs.fontSize {
+                                self.readerFontSize = fSize
+                            }
+                            if let fName = prefs.fontName {
+                                self.readerFontName = fName
+                            }
+                            if let theme = prefs.theme {
+                                self.readerTheme = theme
+                            }
+                            if let auto = prefs.autoUnlockEpisodes {
+                                self.autoUnlockEpisodes = auto
+                            }
+                            if let speed = prefs.audioPlaybackSpeed {
+                                self.audioPlaybackSpeed = speed
+                            }
+                            if let push = prefs.pushNotificationsEnabled {
+                                self.pushNotificationsEnabled = push
+                            }
+                            if let daily = prefs.dailyReadingReminder {
+                                self.dailyReadingReminder = daily
+                            }
                         }
                     }
                 } catch {

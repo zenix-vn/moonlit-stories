@@ -103,6 +103,10 @@ func main() {
 
 	// User info
 	v1.GET("/me", authHandler.GetCurrentUser)
+	v1.PATCH("/me", authHandler.UpdateCurrentUser)
+	v1.POST("/notifications/register", authHandler.RegisterPushToken)
+	v1.GET("/notifications", authHandler.ListNotifications)
+	v1.POST("/notifications/:id/open", authHandler.OpenNotification)
 
 	// Content feed
 	v1.GET("/home", contentHandler.GetHomeFeed)
@@ -166,6 +170,12 @@ func main() {
 			"roles": roles,
 		})
 	})
+
+	// User management
+	adminGroup.GET("/users", authHandler.AdminListUsers, auth.HasRoleCheck("super_admin", "editor"))
+	adminGroup.PATCH("/users/:id", authHandler.AdminUpdateUser, auth.HasRoleCheck("super_admin", "editor"))
+	adminGroup.GET("/notifications/campaigns", authHandler.AdminListCampaigns, auth.HasRoleCheck("super_admin", "editor"))
+	adminGroup.POST("/notifications/campaign", authHandler.AdminCreateCampaign, auth.HasRoleCheck("super_admin", "editor"))
 
 	// Content CRUD
 	adminGroup.GET("/stories", contentHandler.AdminListStories, auth.HasRoleCheck("editor", "writer"))

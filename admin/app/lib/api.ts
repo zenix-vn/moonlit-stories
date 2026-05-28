@@ -241,4 +241,28 @@ export const api = {
       json: { enabled },
     }).catch(() => ({ status: "updated", key }));
   },
+
+  // User Management
+  listUsers: async () => {
+    return apiFetch("/admin/users");
+  },
+
+  updateUser: async (id: string, userPayload: any) => {
+    return apiFetch(`/admin/users/${id}`, {
+      method: "PATCH",
+      json: userPayload,
+    });
+  },
+
+  // Push Campaigns
+  listCampaigns: async () => {
+    return apiFetch("/admin/notifications/campaigns");
+  },
+
+  sendPushCampaign: async (campaign: any) => {
+    return apiFetch("/admin/notifications/campaign", {
+      method: "POST",
+      json: campaign,
+    });
+  },
 };

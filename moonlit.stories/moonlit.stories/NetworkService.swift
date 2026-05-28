@@ -53,6 +53,26 @@ struct GuestLoginResponse: Codable {
     }
 }
 
+struct ReaderPreferences: Codable {
+    var fontSize: Double?
+    var fontName: String?
+    var theme: String?
+    var autoUnlockEpisodes: Bool?
+    var audioPlaybackSpeed: Double?
+    var pushNotificationsEnabled: Bool?
+    var dailyReadingReminder: Bool?
+    
+    enum CodingKeys: String, CodingKey {
+        case fontSize = "fontSize"
+        case fontName = "fontName"
+        case theme = "theme"
+        case autoUnlockEpisodes = "autoUnlockEpisodes"
+        case audioPlaybackSpeed = "audioPlaybackSpeed"
+        case pushNotificationsEnabled = "pushNotificationsEnabled"
+        case dailyReadingReminder = "dailyReadingReminder"
+    }
+}
+
 struct UserProfile: Codable {
     let displayName: String?
     let bio: String?
@@ -60,6 +80,7 @@ struct UserProfile: Codable {
     let countryName: String?
     let timezone: String?
     let language: String
+    let readingPreference: ReaderPreferences?
     
     enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
@@ -68,6 +89,19 @@ struct UserProfile: Codable {
         case countryName = "country_name"
         case timezone
         case language
+        case readingPreference = "reading_preference"
+    }
+}
+
+struct UserStats: Codable {
+    let readingHours: Double
+    let activeStreak: Int
+    let episodesUnlocked: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case readingHours = "reading_hours"
+        case activeStreak = "active_streak"
+        case episodesUnlocked = "episodes_unlocked"
     }
 }
 
@@ -75,6 +109,27 @@ struct MeResponse: Codable {
     let user: User
     let profile: UserProfile?
     let wallet: Wallet
+    let stats: UserStats?
+}
+
+struct PushNotificationItem: Codable, Identifiable {
+    let id: String
+    let title: String
+    let body: String
+    let deepLink: String?
+    let status: String
+    let sentAt: String
+    let openedAt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case body
+        case deepLink = "deep_link"
+        case status
+        case sentAt = "sent_at"
+        case openedAt = "opened_at"
+    }
 }
 
 struct SubscriptionDetail: Codable {
@@ -104,6 +159,107 @@ struct SubscriptionResponse: Codable {
     enum CodingKeys: String, CodingKey {
         case isSubscribed = "is_subscribed"
         case subscription
+    }
+}
+
+struct RewardsStreak: Codable {
+    let currentStreak: Int
+    let longestStreak: Int
+    let lastActiveDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case currentStreak = "current_streak"
+        case longestStreak = "longest_streak"
+        case lastActiveDate = "last_active_date"
+    }
+}
+
+struct RewardCalendarItem: Codable, Identifiable {
+    let day: Int
+    let type: String
+    let amount: Int
+    var id: Int { day }
+}
+
+struct RewardsDashboard: Codable {
+    let streak: RewardsStreak
+    let checkedInToday: Bool
+    let rewardsCalendar: [RewardCalendarItem]
+    let todayDate: String
+
+    enum CodingKeys: String, CodingKey {
+        case streak
+        case checkedInToday = "checked_in_today"
+        case rewardsCalendar = "rewards_calendar"
+        case todayDate = "today_date"
+    }
+}
+
+struct DailyTaskProgress: Codable, Identifiable {
+    let taskID: String
+    let code: String
+    let title: String
+    let description: String
+    let targetEvent: String
+    let targetValue: Int
+    let rewardType: String
+    let rewardAmount: Int
+    let progress: Int
+    let completedAt: String?
+    let claimedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case taskID = "task_id"
+        case code
+        case title
+        case description
+        case targetEvent = "target_event"
+        case targetValue = "target_value"
+        case rewardType = "reward_type"
+        case rewardAmount = "reward_amount"
+        case progress
+        case completedAt = "completed_at"
+        case claimedAt = "claimed_at"
+    }
+
+    var id: String { taskID }
+    var isCompleted: Bool { progress >= targetValue }
+    var isClaimed: Bool { claimedAt != nil }
+}
+
+struct DailyCheckinResponse: Codable {
+    let status: String
+    let rewardType: String
+    let rewardAmount: Int
+    let streakDay: Int
+    let totalStreak: Int
+    let coins: Int?
+    let freePasses: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case rewardType = "reward_type"
+        case rewardAmount = "reward_amount"
+        case streakDay = "streak_day"
+        case totalStreak = "total_streak"
+        case coins
+        case freePasses = "free_passes"
+    }
+}
+
+struct TaskClaimResponse: Codable {
+    let status: String
+    let rewardType: String
+    let rewardAmount: Int
+    let coins: Int?
+    let freePasses: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case rewardType = "reward_type"
+        case rewardAmount = "reward_amount"
+        case coins
+        case freePasses = "free_passes"
     }
 }
 
@@ -440,6 +596,36 @@ class NetworkService {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    private func authenticatedPostNoBody<T: Decodable>(_ path: String) async throws -> T {
+        guard let token = self.token else {
+            _ = try await authenticateGuest()
+            return try await authenticatedPostNoBody(path)
+        }
+        let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        guard let url = URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+
+        if httpResponse.statusCode == 401 {
+            _ = try await authenticateGuest()
+            return try await authenticatedPostNoBody(path)
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errObj = try? JSONDecoder().decode([String: String].self, from: data),
+               let msg = errObj["error"] {
+                throw NSError(domain: "API", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: msg])
+            }
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
     private func authenticatedPostNoContent<U: Encodable>(_ path: String, body: U) async throws {
         guard let token = self.token else {
             _ = try await authenticateGuest()
@@ -544,6 +730,48 @@ class NetworkService {
         }
 
         throw NSError(domain: "API", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Invalid episode response"])
+    }
+    
+    // Unlock episode with Coins
+    func unlockEpisodeWithCoins(episodeId: String) async throws -> UnlockResponse {
+        return try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/coins")
+    }
+
+    // Unlock episode with Free Pass
+    func unlockEpisodeWithFreePass(episodeId: String) async throws -> UnlockResponse {
+        return try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/free-pass")
+    }
+
+    // Unlock episode with Ad
+    func unlockEpisodeWithAd(episodeId: String) async throws -> UnlockResponse {
+        return try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/ad")
+    }
+
+    // Fetch active products/subscription packages
+    func fetchProducts() async throws -> [Product] {
+        return try await authenticatedGet("/v1/products")
+    }
+
+    // Verify IAP Receipt/Purchase on Server
+    func verifyIAPPurchase(productCode: String, transactionId: String) async throws -> IAPVerifyResponse {
+        let request = IAPVerifyRequest(productCode: productCode, platform: "apple", transactionID: transactionId)
+        return try await authenticatedPost("/v1/iap/verify", body: request)
+    }
+
+    func fetchRewardsDashboard() async throws -> RewardsDashboard {
+        return try await authenticatedGet("/v1/rewards/dashboard")
+    }
+
+    func claimDailyCheckin() async throws -> DailyCheckinResponse {
+        return try await authenticatedPostNoBody("/v1/rewards/checkin")
+    }
+
+    func fetchDailyTasks() async throws -> [DailyTaskProgress] {
+        return try await authenticatedGet("/v1/tasks/daily")
+    }
+
+    func claimTaskReward(taskId: String) async throws -> TaskClaimResponse {
+        return try await authenticatedPostNoBody("/v1/tasks/\(taskId)/claim")
     }
     
     // Fetch story detail by slug — backend returns { "story": {...}, "episodes": [...] }
@@ -690,6 +918,102 @@ class NetworkService {
     // Fetch subscription details
     func fetchSubscription() async throws -> SubscriptionResponse {
         return try await authenticatedGet("/v1/me/subscription")
+    }
+    
+    // Update profile details
+    func updateMe(displayName: String?, email: String?, bio: String?, preferences: ReaderPreferences?) async throws -> MeResponse {
+        struct UpdatePayload: Encodable {
+            let display_name: String?
+            let email: String?
+            let bio: String?
+            let reading_preference: ReaderPreferences?
+        }
+        let payload = UpdatePayload(display_name: displayName, email: email, bio: bio, reading_preference: preferences)
+        
+        guard let token = self.token else {
+            _ = try await authenticateGuest()
+            return try await updateMe(displayName: displayName, email: email, bio: bio, preferences: preferences)
+        }
+        
+        let url = baseURL.appendingPathComponent("/v1/me")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        
+        if httpResponse.statusCode == 401 {
+            _ = try await authenticateGuest()
+            return try await updateMe(displayName: displayName, email: email, bio: bio, preferences: preferences)
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(MeResponse.self, from: data)
+    }
+
+    // Register push token
+    func registerPushToken(token: String) async throws {
+        struct RegisterPayload: Encodable {
+            let token: String
+            let platform: String
+        }
+        let payload = RegisterPayload(token: token, platform: "ios")
+        
+        guard let authToken = self.token else {
+            _ = try await authenticateGuest()
+            return try await registerPushToken(token: token)
+        }
+        
+        let url = baseURL.appendingPathComponent("/v1/notifications/register")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        
+        if httpResponse.statusCode == 401 {
+            _ = try await authenticateGuest()
+            return try await registerPushToken(token: token)
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
+
+    // Fetch notification logs
+    func fetchNotifications() async throws -> [PushNotificationItem] {
+        return try await authenticatedGet("/v1/notifications")
+    }
+
+    // Open notification
+    func openNotification(id: String) async throws {
+        guard let authToken = self.token else {
+            _ = try await authenticateGuest()
+            return try await openNotification(id: id)
+        }
+        
+        let url = baseURL.appendingPathComponent("/v1/notifications/\(id)/open")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        
+        if httpResponse.statusCode == 401 {
+            _ = try await authenticateGuest()
+            return try await openNotification(id: id)
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
     }
 }
 
@@ -874,4 +1198,53 @@ struct ReadingProgressRequest: Encodable {
         case progressPercent = "progress_percent"
         case currentPosition = "current_position"
     }
+}
+
+struct UnlockResponse: Codable {
+    let status: String
+    let unlockedAt: String?
+    let coinsLeft: Int?
+    let freePassesLeft: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case status
+        case unlockedAt = "unlocked_at"
+        case coinsLeft = "coins_left"
+        case freePassesLeft = "free_passes_left"
+    }
+}
+
+struct Product: Codable, Identifiable {
+    let id: String
+    let code: String
+    let name: String
+    let type: String // 'coin_pack', 'subscription'
+    let price: Double
+    let currency: String
+    let coinAmount: Int?
+    let bonusCoinAmount: Int?
+    let active: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case id, code, name, type, price, currency, active
+        case coinAmount = "coin_amount"
+        case bonusCoinAmount = "bonus_coin_amount"
+    }
+}
+
+struct IAPVerifyRequest: Encodable {
+    let productCode: String
+    let platform: String
+    let transactionID: String
+    
+    enum CodingKeys: String, CodingKey {
+        case productCode = "product_code"
+        case platform
+        case transactionID = "transaction_id"
+    }
+}
+
+struct IAPVerifyResponse: Decodable {
+    let status: String
+    let wallet: Wallet?
 }

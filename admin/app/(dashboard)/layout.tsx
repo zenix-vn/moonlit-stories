@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   User,
+  Bell,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -63,6 +64,8 @@ export default function DashboardLayout({
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Stories & CMS", href: "/stories", icon: BookOpen },
     { name: "Banner Ads", href: "/banners", icon: ImageIcon },
+    { name: "Users & Profiles", href: "/users", icon: User },
+    { name: "Push Campaigns", href: "/notifications", icon: Bell },
     { name: "App Settings", href: "/config", icon: Settings },
   ];
 
