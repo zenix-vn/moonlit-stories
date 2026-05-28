@@ -653,7 +653,7 @@ struct Onboarding3PageView: View {
     }
 }
 
-// MARK: - Onboarding 3 Bottom Content (SwiftUI button for "Get Started")
+// MARK: - Onboarding 3 Bottom Content
 private struct Ob3BottomContent: View {
     let index:       Int
     let total:       Int
@@ -665,22 +665,16 @@ private struct Ob3BottomContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Begin Your\nMoonlit Journey")
-                .font(.custom("Georgia-BoldItalic", size: 38))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(LinearGradient(
-                    colors: [
-                        Color(red: 1.00, green: 0.96, blue: 0.58),
-                        Color(red: 0.95, green: 0.78, blue: 0.20),
-                        Color(red: 1.00, green: 0.90, blue: 0.45),
-                    ],
-                    startPoint: .top, endPoint: .bottom))
-                .shadow(color: Color(red: 1, green: 0.85, blue: 0.3).opacity(0.5),
-                        radius: 14, x: 0, y: 0)
+            // Title image
+            Image("Ob3Text")
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 340)
+                .padding(.horizontal, 24)
                 .opacity(titleOpacity)
                 .offset(y: titleOffset)
-                .padding(.horizontal, 28)
 
+            // Sparkle divider
             HStack(spacing: 6) {
                 Rectangle().fill(Color(red: 1, green: 0.85, blue: 0.3).opacity(0.4))
                     .frame(width: 40, height: 1)
@@ -705,26 +699,22 @@ private struct Ob3BottomContent: View {
                 .padding(.top, 24)
                 .opacity(bodyOpacity)
 
+            // Get Started button (Ob3Button image + text overlay)
             Button(action: onButton) {
-                Text("Get Started")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.12, green: 0.06, blue: 0.01))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .background(
-                        RoundedRectangle(cornerRadius: 50)
-                            .fill(LinearGradient(
-                                colors: [
-                                    Color(red: 1.00, green: 0.90, blue: 0.38),
-                                    Color(red: 0.95, green: 0.68, blue: 0.10),
-                                ],
-                                startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .shadow(color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.45),
-                                    radius: 16, x: 0, y: 6)
-                    )
+                ZStack {
+                    Image("Ob3Button")
+                        .resizable()
+                        .scaledToFit()
+                    Text("Get Started")
+                        .font(.custom("Georgia-Bold", size: 19))
+                        .foregroundStyle(Color(red: 0.10, green: 0.05, blue: 0.01))
+                }
+                .frame(maxWidth: 320)
+                .padding(.horizontal, 28)
+                .shadow(color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.42),
+                        radius: 16, x: 0, y: 6)
             }
             .scaleEffect(btnScale)
-            .padding(.horizontal, 28)
             .padding(.top, 22)
             .padding(.bottom, 52)
             .opacity(bodyOpacity)
