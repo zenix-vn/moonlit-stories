@@ -114,6 +114,7 @@ func main() {
 	// Episodes detail & verification
 	v1.GET("/episodes/:episodeId", contentHandler.GetEpisodeDetail)
 	v1.GET("/episodes/:episodeId/access", contentHandler.GetEpisodeAccess)
+	v1.GET("/stories/:slug/episodes", contentHandler.GetStoryEpisodes)
 
 	// Reading module
 	v1.POST("/reading/session/start", readingHandler.StartSession)
@@ -171,10 +172,25 @@ func main() {
 	adminGroup.POST("/stories", contentHandler.AdminCreateStory, auth.HasRoleCheck("editor"))
 	adminGroup.GET("/stories/:id", contentHandler.AdminGetStoryByID)
 	adminGroup.PATCH("/stories/:id", contentHandler.AdminUpdateStory, auth.HasRoleCheck("editor"))
+	adminGroup.PATCH("/stories/:id/publish", contentHandler.AdminPublishStory, auth.HasRoleCheck("editor"))
+	adminGroup.DELETE("/stories/:id", contentHandler.AdminDeleteStory, auth.HasRoleCheck("editor"))
+	adminGroup.GET("/stories/:id/genres-moods", contentHandler.AdminGetStoryGenresMoods)
+	adminGroup.PUT("/stories/:id/genres-moods", contentHandler.AdminUpdateStoryGenresMoods, auth.HasRoleCheck("editor"))
 	adminGroup.GET("/stories/:storyId/episodes", contentHandler.AdminListEpisodes)
 	adminGroup.POST("/stories/:storyId/episodes", contentHandler.AdminCreateEpisode, auth.HasRoleCheck("editor"))
 	adminGroup.GET("/episodes/:id", contentHandler.AdminGetEpisodeByID)
 	adminGroup.PATCH("/episodes/:id", contentHandler.AdminUpdateEpisode, auth.HasRoleCheck("editor"))
+	adminGroup.DELETE("/episodes/:id", contentHandler.AdminDeleteEpisode, auth.HasRoleCheck("editor"))
+	adminGroup.GET("/banners", bannerHandler.AdminListBanners, auth.HasRoleCheck("editor", "super_admin"))
+	adminGroup.POST("/banners", bannerHandler.AdminCreateBanner, auth.HasRoleCheck("editor", "super_admin"))
+	adminGroup.PATCH("/banners/:id", bannerHandler.AdminUpdateBanner, auth.HasRoleCheck("editor", "super_admin"))
+	adminGroup.DELETE("/banners/:id", bannerHandler.AdminDeleteBanner, auth.HasRoleCheck("editor", "super_admin"))
+
+	// Admin app config & feature flags
+	adminGroup.GET("/app-config", bannerHandler.AdminGetAppConfig, auth.HasRoleCheck("editor", "super_admin"))
+	adminGroup.PATCH("/app-config/:key", bannerHandler.AdminUpdateAppConfig, auth.HasRoleCheck("editor", "super_admin"))
+	adminGroup.GET("/feature-flags", bannerHandler.AdminGetFeatureFlags, auth.HasRoleCheck("editor", "super_admin"))
+	adminGroup.PATCH("/feature-flags/:key", bannerHandler.AdminUpdateFeatureFlag, auth.HasRoleCheck("editor", "super_admin"))
 
 	// 5. Start HTTP Server
 	portAddr := fmt.Sprintf(":%s", cfg.Port)

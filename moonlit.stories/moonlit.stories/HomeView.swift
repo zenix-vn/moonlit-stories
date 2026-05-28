@@ -32,7 +32,7 @@ struct HomeView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            MainHomeTab()
+            MainHomeTab(selectedTab: $tab)
                 .tabItem { Label("Home",    systemImage: "house.fill") }
                 .tag(0)
             SearchTabView()
@@ -41,7 +41,7 @@ struct HomeView: View {
             LibraryTabView()
                 .tabItem { Label("Library", systemImage: "books.vertical.fill") }
                 .tag(2)
-            PlaceholderTab(icon: "person.fill", label: "Profile")
+            ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(3)
         }
@@ -72,6 +72,7 @@ struct HomeView: View {
 
 // MARK: - Main Home Tab
 struct MainHomeTab: View {
+    @Binding var selectedTab: Int
     @StateObject private var viewModel = HomeViewModel()
     @State private var selectedGenreFilter: String? = nil
 
@@ -223,7 +224,9 @@ struct MainHomeTab: View {
                 await viewModel.loadFeed()
             }
 
-            TopNav(wallet: viewModel.wallet)
+            TopNav(wallet: viewModel.wallet, onProfileTap: {
+                selectedTab = 3
+            })
         }
         .navigationBarHidden(true)
         } // NavigationStack
@@ -281,6 +284,7 @@ struct MidPromotionBanner: View {
 // MARK: - Top Navigation Bar
 struct TopNav: View {
     let wallet: Wallet?
+    let onProfileTap: () -> Void
     
     var body: some View {
         VStack(spacing: 0) {
@@ -331,7 +335,7 @@ struct TopNav: View {
                     }
                 }
 
-                Button(action: {}) {
+                Button(action: onProfileTap) {
                     ZStack {
                         Circle()
                             .fill(LinearGradient(

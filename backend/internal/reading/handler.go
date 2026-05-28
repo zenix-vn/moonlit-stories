@@ -197,15 +197,38 @@ func (h *ReadingHandler) GetLibrary(c echo.Context) error {
 	libType := c.QueryParam("type") // 'saved', 'completed', 'history'
 
 	var rows *sql.Rows
-	if libType != "" {
+	switch libType {
+	case "history":
+		// Real history from latest reading progress per story.
+		rows, err = h.DB.QueryContext(ctx, `
+			SELECT s.id, s.title, s.slug, s.description, s.cover_url, 'history' AS type, rp.last_read_at
+			FROM reading_progress rp
+			JOIN stories s ON rp.story_id = s.id
+			WHERE rp.user_id = $1 AND s.status = 'published'
+			ORDER BY rp.last_read_at DESC
+		`, userID)
+	case "completed":
+		// Completed when user finished the final episode with 100% progress.
+		rows, err = h.DB.QueryContext(ctx, `
+			SELECT s.id, s.title, s.slug, s.description, s.cover_url, 'completed' AS type, rp.last_read_at
+			FROM reading_progress rp
+			JOIN stories s ON rp.story_id = s.id
+			JOIN episodes e ON rp.episode_id = e.id
+			WHERE rp.user_id = $1
+			  AND s.status = 'published'
+			  AND rp.progress_percent >= 100
+			  AND e.episode_number = s.total_episodes
+			ORDER BY rp.last_read_at DESC
+		`, userID)
+	case "saved":
 		rows, err = h.DB.QueryContext(ctx, `
 			SELECT s.id, s.title, s.slug, s.description, s.cover_url, l.type, l.created_at
 			FROM library_items l
 			JOIN stories s ON l.story_id = s.id
-			WHERE l.user_id = $1 AND l.type = $2 AND s.status = 'published'
+			WHERE l.user_id = $1 AND l.type = 'saved' AND s.status = 'published'
 			ORDER BY l.created_at DESC
-		`, userID, libType)
-	} else {
+		`, userID)
+	default:
 		rows, err = h.DB.QueryContext(ctx, `
 			SELECT s.id, s.title, s.slug, s.description, s.cover_url, l.type, l.created_at
 			FROM library_items l

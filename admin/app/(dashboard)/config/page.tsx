@@ -10,6 +10,13 @@ export default function ConfigPage() {
     default_episode_coin_price: 20,
     maintenance_mode: false,
     min_supported_version: "1.0.0",
+    home_hero_card: {
+      metric: "1000+",
+      title: "Werewolf Novels",
+      subtitle: "Romance stories · Love episodes",
+      cta_text: "Start Reading",
+      cta_deep_link: "",
+    },
   });
   const [flags, setFlags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +122,94 @@ export default function ConfigPage() {
               />
               <p className="text-[11px] text-[#94a3b8] mt-1.5">
                 Standard number of free chapters granted to guests on newly created stories
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Home Hero Metric
+              </label>
+              <input
+                type="text"
+                value={config.home_hero_card?.metric || ""}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    home_hero_card: { ...(config.home_hero_card || {}), metric: e.target.value },
+                  })
+                }
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Home Hero Title
+              </label>
+              <input
+                type="text"
+                value={config.home_hero_card?.title || ""}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    home_hero_card: { ...(config.home_hero_card || {}), title: e.target.value },
+                  })
+                }
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Home Hero Subtitle
+              </label>
+              <input
+                type="text"
+                value={config.home_hero_card?.subtitle || ""}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    home_hero_card: { ...(config.home_hero_card || {}), subtitle: e.target.value },
+                  })
+                }
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Home Hero CTA Text
+              </label>
+              <input
+                type="text"
+                value={config.home_hero_card?.cta_text || ""}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    home_hero_card: { ...(config.home_hero_card || {}), cta_text: e.target.value },
+                  })
+                }
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Home Hero CTA Deep Link
+              </label>
+              <input
+                type="text"
+                value={config.home_hero_card?.cta_deep_link || ""}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    home_hero_card: { ...(config.home_hero_card || {}), cta_deep_link: e.target.value },
+                  })
+                }
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 font-mono text-white text-xs"
+              />
+              <p className="text-[11px] text-[#94a3b8] mt-1.5">
+                Example: app://discover?genre=werewolf-vampire
               </p>
             </div>
 

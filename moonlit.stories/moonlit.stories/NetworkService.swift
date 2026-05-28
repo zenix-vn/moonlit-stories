@@ -53,6 +53,60 @@ struct GuestLoginResponse: Codable {
     }
 }
 
+struct UserProfile: Codable {
+    let displayName: String?
+    let bio: String?
+    let countryCode: String?
+    let countryName: String?
+    let timezone: String?
+    let language: String
+    
+    enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+        case bio
+        case countryCode = "country_code"
+        case countryName = "country_name"
+        case timezone
+        case language
+    }
+}
+
+struct MeResponse: Codable {
+    let user: User
+    let profile: UserProfile?
+    let wallet: Wallet
+}
+
+struct SubscriptionDetail: Codable {
+    let id: String
+    let userId: String
+    let productId: String?
+    let platform: String
+    let status: String
+    let startedAt: String?
+    let expiresAt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case productId = "product_id"
+        case platform
+        case status
+        case startedAt = "started_at"
+        case expiresAt = "expires_at"
+    }
+}
+
+struct SubscriptionResponse: Codable {
+    let isSubscribed: Bool
+    let subscription: SubscriptionDetail?
+    
+    enum CodingKeys: String, CodingKey {
+        case isSubscribed = "is_subscribed"
+        case subscription
+    }
+}
+
 struct Story: Codable, Identifiable, Hashable {
     let id: String
     let title: String
@@ -626,6 +680,16 @@ class NetworkService {
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
+    }
+
+    // Fetch profile details
+    func fetchMe() async throws -> MeResponse {
+        return try await authenticatedGet("/v1/me")
+    }
+
+    // Fetch subscription details
+    func fetchSubscription() async throws -> SubscriptionResponse {
+        return try await authenticatedGet("/v1/me/subscription")
     }
 }
 

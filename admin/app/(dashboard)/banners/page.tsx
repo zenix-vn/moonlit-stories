@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import { Image as ImageIcon, Plus, CheckCircle, EyeOff, Tag, Compass } from "lucide-react";
+import { Image as ImageIcon, Plus, CheckCircle, EyeOff, Compass, Trash2 } from "lucide-react";
 
 export default function BannersPage() {
   const [banners, setBanners] = useState<any[]>([]);
@@ -18,6 +18,47 @@ export default function BannersPage() {
   const [priority, setPriority] = useState(0);
   const [active, setActive] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    try {
+      await api.updateBanner(id, { active: !current });
+      setBanners((prev) => prev.map((b) => (b.id === id ? { ...b, active: !current } : b)));
+    } catch (err: any) {
+      setError(err.message || "Failed to update banner status");
+    }
+  };
+
+  const handleDeleteBanner = async (id: string) => {
+    try {
+      await api.deleteBanner(id);
+      setBanners((prev) => prev.filter((b) => b.id !== id));
+    } catch (err: any) {
+      setError(err.message || "Failed to delete banner");
+    }
+  };
+
+  const startEditBanner = (banner: any) => {
+    setEditingId(banner.id);
+    setTitle(banner.title || "");
+    setSubtitle(banner.subtitle || "");
+    setImageURL(banner.image_url || "");
+    setDeepLink(banner.deep_link || "");
+    setPlacement(banner.placement || "home_top");
+    setPriority(Number(banner.priority || 0));
+    setActive(Boolean(banner.active));
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setTitle("");
+    setSubtitle("");
+    setImageURL("");
+    setDeepLink("");
+    setPlacement("home_top");
+    setPriority(0);
+    setActive(true);
+  };
 
   const fetchBanners = async () => {
     try {
@@ -40,25 +81,33 @@ export default function BannersPage() {
     setCreating(true);
 
     try {
-      await api.createBanner({
-        title,
-        subtitle: subtitle || null,
-        image_url: imageURL,
-        deep_link: deepLink || null,
-        placement,
-        priority: Number(priority),
-        active,
-      });
+      if (editingId) {
+        await api.updateBanner(editingId, {
+          title,
+          subtitle: subtitle || null,
+          image_url: imageURL,
+          deep_link: deepLink || null,
+          placement,
+          priority: Number(priority),
+          active,
+        });
+      } else {
+        await api.createBanner({
+          title,
+          subtitle: subtitle || null,
+          image_url: imageURL,
+          deep_link: deepLink || null,
+          placement,
+          priority: Number(priority),
+          active,
+        });
+      }
 
       // Clear Form
-      setTitle("");
-      setSubtitle("");
-      setImageURL("");
-      setDeepLink("");
-      setPriority(0);
+      resetForm();
       fetchBanners();
     } catch (err: any) {
-      setError(err.message || "Failed to create banner");
+      setError(err.message || (editingId ? "Failed to update banner" : "Failed to create banner"));
     } finally {
       setCreating(false);
     }
@@ -138,6 +187,29 @@ export default function BannersPage() {
                       <span className="font-semibold text-slate-300">Action Link:</span> {b.deep_link}
                     </div>
                   )}
+
+                  <div className="mt-4 pt-3 border-t border-[#2d334a]/40 flex items-center gap-2">
+                    <button
+                      onClick={() => startEditBanner(b)}
+                      className="inline-flex items-center gap-1 rounded-md border border-purple-500/40 px-2 py-1 text-xs text-purple-300 hover:bg-purple-900/20"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleToggleActive(b.id, b.active)}
+                      className="inline-flex items-center gap-1 rounded-md border border-[#2d334a] px-2 py-1 text-xs text-slate-300 hover:bg-[#171b31]"
+                    >
+                      {b.active ? <EyeOff className="h-3.5 w-3.5" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                      {b.active ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBanner(b.id)}
+                      className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-950/30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -148,7 +220,7 @@ export default function BannersPage() {
         <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md h-fit">
           <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
             <Plus className="h-5 w-5 text-[#8b5cf6]" />
-            Add Promotion Banner
+            {editingId ? "Edit Promotion Banner" : "Add Promotion Banner"}
           </h3>
 
           <form onSubmit={handleCreateBanner} className="space-y-4 text-sm">
@@ -252,8 +324,17 @@ export default function BannersPage() {
               disabled={creating}
               className="mt-4 flex w-full justify-center items-center rounded-lg bg-gradient-to-r from-[#8b5cf6] to-[#a855f7] py-2.5 px-4 font-semibold text-white shadow-md disabled:opacity-50 transition-all gap-2"
             >
-              {creating ? "Creating..." : "Publish Banner Placement"}
+              {creating ? (editingId ? "Updating..." : "Creating...") : (editingId ? "Update Banner" : "Publish Banner Placement")}
             </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="mt-2 flex w-full justify-center items-center rounded-lg border border-[#2d334a] py-2.5 px-4 font-semibold text-slate-300 hover:bg-[#171b31] transition-all"
+              >
+                Cancel Edit
+              </button>
+            )}
           </form>
         </div>
       </div>

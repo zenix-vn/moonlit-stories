@@ -57,6 +57,7 @@ services:
       - "127.0.0.1:3098:3000"
     environment:
       - PORT=3000
+      - NEXT_PUBLIC_API_URL=https://moonlit.zenix.vn
     restart: always
 
 volumes:

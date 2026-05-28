@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		54413DB12FC8165900A17A69 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		54413DB12FC8165900A17A69 /* Exceptions for "moonlit.stories" folder in "moonlit.stories" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -43,7 +43,7 @@
 		54413D732FC8165700A17A69 /* moonlit.stories */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				54413DB12FC8165900A17A69 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				54413DB12FC8165900A17A69 /* Exceptions for "moonlit.stories" folder in "moonlit.stories" target */,
 			);
 			path = moonlit.stories;
 			sourceTree = "<group>";
@@ -415,7 +415,7 @@
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
-				INFOPLIST_FILE = "moonlit.stories/Info.plist";
+				INFOPLIST_FILE = moonlit.stories/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -448,7 +448,7 @@
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
-				INFOPLIST_FILE = "moonlit.stories/Info.plist";
+				INFOPLIST_FILE = moonlit.stories/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
