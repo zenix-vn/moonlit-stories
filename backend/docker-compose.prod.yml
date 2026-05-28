@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: moonlit-postgres-prod
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-moonlit_prod_password_992}
+      POSTGRES_DB: ${DB_NAME:-moonlit_stories}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d moonlit_stories"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: moonlit-redis-prod
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: moonlit-backend-prod
+    ports:
+      - "127.0.0.1:8098:8088"
+    environment:
+      - PORT=8088
+      - ENV=production
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-moonlit_prod_password_992}@postgres:5432/${DB_NAME:-moonlit_stories}?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-moonlit_prod_user_jwt_secret_xyz_123}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET:-moonlit_prod_admin_jwt_secret_abc_456}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
