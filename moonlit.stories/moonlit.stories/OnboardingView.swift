@@ -258,38 +258,145 @@ struct Onboarding1PageView: View {
     }
 }
 
-// MARK: - Onboarding 2 — flat design image
-private struct Onboarding2PageView: View {
+// MARK: - Onboarding 2 — Layered illustration
+struct Onboarding2PageView: View {
     let index:       Int
     let total:       Int
     @Binding var currentPage: Int
     @Binding var isFinished:  Bool
+
+    // ── Entry states ──────────────────────────────────────────────────────
+    @State private var moonOpacity:  Double  = 0
+    @State private var moonY:        CGFloat = -28
+    @State private var bookScale:    Double  = 0.72
+    @State private var bookOpacity:  Double  = 0
+    @State private var swirlOpacity: Double  = 0
+    @State private var swirlScale:   Double  = 0.55
+
+    // Cards: opacity + fly-in Y offset (starts at book, flies to final position)
+    @State private var c1Op: Double = 0; @State private var c1Y: CGFloat = 70
+    @State private var c2Op: Double = 0; @State private var c2Y: CGFloat = 70
+    @State private var c3Op: Double = 0; @State private var c3Y: CGFloat = 70
+    @State private var c4Op: Double = 0; @State private var c4Y: CGFloat = 70
+    @State private var c5Op: Double = 0; @State private var c5Y: CGFloat = 70
 
     @State private var titleOpacity: Double  = 0
     @State private var titleOffset:  CGFloat = 24
     @State private var bodyOpacity:  Double  = 0
     @State private var btnScale:     Double  = 0.88
 
+    // ── Loop states ───────────────────────────────────────────────────────
+    @State private var moonGlow:    Double  = 0.40
+    @State private var bookFloat:   CGFloat = 0
+    @State private var swirlPulse:  Double  = 0.75
+    @State private var f1: CGFloat = 0; @State private var f2: CGFloat = 2
+    @State private var f3: CGFloat = 0; @State private var f4: CGFloat = 3
+    @State private var f5: CGFloat = 0
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            Image("Onboarding2")
+
+            // ── Background ────────────────────────────────────────────────
+            Image("Ob2Background")
                 .resizable()
                 .scaledToFill()
                 .ignoresSafeArea()
 
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+
+                ZStack {
+                    // ── Swirl (golden S-curve from book) ──────────────────
+                    Image("Ob2Swirl")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: w * 0.52)
+                        .opacity(swirlOpacity * swirlPulse)
+                        .scaleEffect(swirlScale, anchor: .bottom)
+                        .position(x: w * 0.52, y: h * 0.32)
+
+                    // ── Moon (upper-left) ─────────────────────────────────
+                    Image("Ob2Moon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: w * 0.22)
+                        .shadow(color: Color(red: 1, green: 0.80, blue: 0.18).opacity(moonGlow),
+                                radius: 32, x: 0, y: 0)
+                        .opacity(moonOpacity)
+                        .offset(y: moonY)
+                        .position(x: w * 0.18, y: h * 0.13)
+
+                    // ── Book (bottom-center) ──────────────────────────────
+                    Image("Ob2Book")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: w * 0.74)
+                        .shadow(color: Color(red: 1, green: 0.82, blue: 0.25).opacity(0.40),
+                                radius: 22, x: 0, y: 6)
+                        .scaleEffect(bookScale)
+                        .opacity(bookOpacity)
+                        .offset(y: bookFloat)
+                        .position(x: w * 0.50, y: h * 0.57)
+
+                    // ── Book cards (fly out from book) ────────────────────
+
+                    // img3 — ship (upper-left)
+                    Image("Ob2Img3")
+                        .resizable().scaledToFit().frame(width: w * 0.28)
+                        .rotationEffect(.degrees(14))
+                        .opacity(c3Op).offset(y: c3Y + f3)
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: 1, y: 3)
+                        .position(x: w * 0.18, y: h * 0.22)
+
+                    // img4 — dragon (upper-center)
+                    Image("Ob2Img4")
+                        .resizable().scaledToFit().frame(width: w * 0.27)
+                        .rotationEffect(.degrees(-7))
+                        .opacity(c4Op).offset(y: c4Y + f4)
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: -1, y: 3)
+                        .position(x: w * 0.50, y: h * 0.14)
+
+                    // img1 — balloon (upper-right)
+                    Image("Ob2Img1")
+                        .resizable().scaledToFit().frame(width: w * 0.28)
+                        .rotationEffect(.degrees(10))
+                        .opacity(c1Op).offset(y: c1Y + f1)
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: 1, y: 3)
+                        .position(x: w * 0.82, y: h * 0.22)
+
+                    // img2 — forest girl (mid-left)
+                    Image("Ob2Img2")
+                        .resizable().scaledToFit().frame(width: w * 0.27)
+                        .rotationEffect(.degrees(-13))
+                        .opacity(c2Op).offset(y: c2Y + f2)
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: 1, y: 3)
+                        .position(x: w * 0.20, y: h * 0.38)
+
+                    // img5 — castle (mid-right)
+                    Image("Ob2Img5")
+                        .resizable().scaledToFit().frame(width: w * 0.28)
+                        .rotationEffect(.degrees(13))
+                        .opacity(c5Op).offset(y: c5Y + f5)
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: -1, y: 3)
+                        .position(x: w * 0.80, y: h * 0.38)
+                }
+            }
+
+            // ── Bottom gradient ───────────────────────────────────────────
             LinearGradient(
                 colors: [
                     Color.clear,
-                    Color(red: 0.030, green: 0.045, blue: 0.130).opacity(0.60),
-                    Color(red: 0.020, green: 0.030, blue: 0.100).opacity(0.97),
+                    Color(red: 0.025, green: 0.038, blue: 0.115).opacity(0.55),
+                    Color(red: 0.015, green: 0.025, blue: 0.085).opacity(0.98),
                 ],
-                startPoint: .init(x: 0.5, y: 0.30),
+                startPoint: .init(x: 0.5, y: 0.26),
                 endPoint: .bottom
             )
             .ignoresSafeArea()
 
+            // ── Bottom content ────────────────────────────────────────────
             VStack(spacing: 0) {
-                // Title (SwiftUI, no image asset for page 2 yet)
                 Text("Discover Your\nNext Favorite Story")
                     .font(.custom("Georgia-BoldItalic", size: 38))
                     .multilineTextAlignment(.center)
@@ -330,17 +437,21 @@ private struct Onboarding2PageView: View {
                     .padding(.top, 24)
                     .opacity(bodyOpacity)
 
-                // Continue button image
+                // Continue button (Ob2Button image + text overlay)
                 Button(action: {
                     withAnimation(.spring(duration: 0.45)) { currentPage = 2 }
                 }) {
-                    Image("BtnContinue")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 320)
-                        .padding(.horizontal, 28)
-                        .shadow(
-                            color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.40),
+                    ZStack {
+                        Image("Ob2Button")
+                            .resizable()
+                            .scaledToFit()
+                        Text("Continue")
+                            .font(.custom("Georgia-Bold", size: 19))
+                            .foregroundStyle(Color(red: 0.10, green: 0.05, blue: 0.01))
+                    }
+                    .frame(maxWidth: 320)
+                    .padding(.horizontal, 28)
+                    .shadow(color: Color(red: 1, green: 0.78, blue: 0.2).opacity(0.40),
                             radius: 16, x: 0, y: 6)
                 }
                 .scaleEffect(btnScale)
@@ -349,23 +460,62 @@ private struct Onboarding2PageView: View {
                 .opacity(bodyOpacity)
             }
         }
-        .onAppear { animateIn() }
+        .onAppear { animateIn(); startLooping() }
         .onChange(of: currentPage) { _, _ in
             guard currentPage == index else { return }
             resetAndAnimate()
         }
     }
 
+    // MARK: Entry
     private func animateIn() {
-        withAnimation(.spring(response: 0.65, dampingFraction: 0.78).delay(0.15)) {
+        // Moon descends
+        withAnimation(.spring(response: 0.75, dampingFraction: 0.72).delay(0.18)) {
+            moonOpacity = 1; moonY = 0
+        }
+        // Book scales in
+        withAnimation(.spring(response: 0.70, dampingFraction: 0.70).delay(0.38)) {
+            bookScale = 1; bookOpacity = 1
+        }
+        // Swirl grows from book bottom
+        withAnimation(.spring(response: 0.80, dampingFraction: 0.75).delay(0.55)) {
+            swirlOpacity = 1; swirlScale = 1
+        }
+        // Cards fly out one by one (staggered)
+        let delays: [Double] = [0.72, 0.87, 0.65, 1.02, 1.00]
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.72).delay(delays[0])) { c1Op = 1; c1Y = 0 }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.72).delay(delays[1])) { c2Op = 1; c2Y = 0 }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.72).delay(delays[2])) { c3Op = 1; c3Y = 0 }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.72).delay(delays[3])) { c4Op = 1; c4Y = 0 }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.72).delay(delays[4])) { c5Op = 1; c5Y = 0 }
+        // Text
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.78).delay(1.20)) {
             titleOpacity = 1; titleOffset = 0
         }
-        withAnimation(.easeOut(duration: 0.6).delay(0.45)) { bodyOpacity = 1 }
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.55)) { btnScale = 1 }
+        withAnimation(.easeOut(duration: 0.55).delay(1.48)) { bodyOpacity  = 1 }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(1.55)) { btnScale = 1 }
     }
+
     private func resetAndAnimate() {
+        moonOpacity = 0; moonY = -28
+        bookScale = 0.72; bookOpacity = 0
+        swirlOpacity = 0; swirlScale = 0.55
+        c1Op = 0; c1Y = 70; c2Op = 0; c2Y = 70
+        c3Op = 0; c3Y = 70; c4Op = 0; c4Y = 70; c5Op = 0; c5Y = 70
         titleOpacity = 0; titleOffset = 24; bodyOpacity = 0; btnScale = 0.88
         animateIn()
+    }
+
+    // MARK: Loop
+    private func startLooping() {
+        withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) { moonGlow = 0.85 }
+        withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true).delay(0.4)) { bookFloat = -6 }
+        withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true).delay(0.2)) { swirlPulse = 1.0 }
+        withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true).delay(0.0)) { f1 = -5 }
+        withAnimation(.easeInOut(duration: 3.1).repeatForever(autoreverses: true).delay(0.5)) { f2 = -4 }
+        withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(0.9)) { f3 = -6 }
+        withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true).delay(0.3)) { f4 = -5 }
+        withAnimation(.easeInOut(duration: 2.9).repeatForever(autoreverses: true).delay(0.7)) { f5 = -4 }
     }
 }
 
