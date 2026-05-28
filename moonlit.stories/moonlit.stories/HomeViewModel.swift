@@ -8,7 +8,6 @@ class HomeViewModel: ObservableObject {
     
     @Published var greeting: String = "Good Evening"
     @Published var wallet: Wallet? = nil
-    @Published var featuredStory: Story? = nil
     @Published var continueReading: [ContinueReadingItem] = []
     @Published var tonightsPicks: [Story] = []
     @Published var trendingNow: [Story] = []
@@ -91,7 +90,6 @@ class HomeViewModel: ObservableObject {
 
             self.greeting = response.greeting
             self.wallet = response.wallet
-            self.featuredStory = response.featuredStory
             self.continueReading = response.continueReading ?? []
             self.tonightsPicks = response.tonightsPicks
             self.trendingNow = response.trendingNow
@@ -112,7 +110,9 @@ class HomeViewModel: ObservableObject {
         } catch {
             self.errorMessage = error.localizedDescription
             self.isLoading = false
+            #if DEBUG
             print("Error loading home feed: \(error)")
+            #endif
         }
     }
 }

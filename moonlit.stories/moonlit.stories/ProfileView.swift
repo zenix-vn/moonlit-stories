@@ -8,10 +8,10 @@ struct ProfileView: View {
     @State private var errorMessage: String? = nil
     @State private var isShowingCoinShop = false
 
-    // Streak / stats (mock data or values based on user profiles)
-    @State private var readingHours = 12.4
-    @State private var activeStreak = 5
-    @State private var episodesUnlocked = 38
+    // Streak / stats (populated from API)
+    @State private var readingHours = 0.0
+    @State private var activeStreak = 0
+    @State private var episodesUnlocked = 0
     
     var body: some View {
         NavigationStack {
@@ -88,7 +88,7 @@ struct ProfileView: View {
                     await loadProfileData()
                 }
             }
-            .navigationBarHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $isShowingCoinShop) {
                 CoinShopView()
             }
@@ -128,7 +128,9 @@ struct ProfileView: View {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
             }
+            #if DEBUG
             print("Failed to load profile data: \(error)")
+            #endif
         }
     }
 }

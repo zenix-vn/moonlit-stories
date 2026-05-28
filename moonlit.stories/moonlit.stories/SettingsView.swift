@@ -392,7 +392,9 @@ struct SettingsView: View {
                         }
                     }
                 } catch {
+                    #if DEBUG
                     print("Error fetching profile: \(error)")
+                    #endif
                 }
             }
         }

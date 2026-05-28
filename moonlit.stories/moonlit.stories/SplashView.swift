@@ -164,9 +164,13 @@ struct SplashView: View {
             // Perform guest login authentication in the background
             do {
                 _ = try await NetworkService.shared.authenticateGuest()
+                #if DEBUG
                 print("Guest authentication successful!")
+                #endif
             } catch {
+                #if DEBUG
                 print("Guest authentication failed: \(error)")
+                #endif
                 // Do not block app transition on authentication error;
                 // HomeView's network retrieval will handle error and retry states.
             }
@@ -187,6 +191,7 @@ struct SplashView: View {
 
 private struct LoadingDots: View {
     @State private var active = 0
+    @State private var timer: Timer? = nil
 
     var body: some View {
         HStack(spacing: MoonlitTheme.Spacing.sm) {
@@ -199,9 +204,13 @@ private struct LoadingDots: View {
             }
         }
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 0.42, repeats: true) { _ in
+            timer = Timer.scheduledTimer(withTimeInterval: 0.42, repeats: true) { _ in
                 active = (active + 1) % 3
             }
+        }
+        .onDisappear {
+            timer?.invalidate()
+            timer = nil
         }
     }
 }

@@ -13,19 +13,6 @@ extension Color {
     static let mlMuted     = Color(white: 0.45)
 }
 
-// Helper to generate consistent gradient colors based on string hash for missing covers
-func getGradientForString(_ str: String) -> (Color, Color) {
-    let hash = abs(str.hashValue)
-    let colors: [(Color, Color)] = [
-        (Color(red: 0.08, green: 0.02, blue: 0.20), Color(red: 0.38, green: 0.12, blue: 0.60)),
-        (Color(red: 0.10, green: 0.02, blue: 0.08), Color(red: 0.52, green: 0.10, blue: 0.25)),
-        (Color(red: 0.05, green: 0.04, blue: 0.18), Color(red: 0.15, green: 0.20, blue: 0.60)),
-        (Color(red: 0.08, green: 0.04, blue: 0.16), Color(red: 0.36, green: 0.10, blue: 0.50)),
-        (Color(red: 0.10, green: 0.02, blue: 0.06), Color(red: 0.50, green: 0.08, blue: 0.20))
-    ]
-    return colors[hash % colors.count]
-}
-
 // MARK: - Root View
 struct HomeView: View {
     @State private var tab = 0
@@ -228,7 +215,7 @@ struct MainHomeTab: View {
                 selectedTab = 3
             })
         }
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         } // NavigationStack
     }
 }
@@ -802,23 +789,13 @@ struct ContinueCard: View {
         let colors = getGradientForString(item.storyTitle)
         HStack(spacing: 12) {
             ZStack {
-                if let coverUrl = item.coverUrl, let url = URL(string: coverUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(LinearGradient(colors: [colors.0, colors.1], startPoint: .top, endPoint: .bottom))
-                        }
-                    }
-                    .frame(width: 50, height: 68)
-                    .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(colors: [colors.0, colors.1], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 50, height: 68)
-                }
+                StoryCoverView(
+                    coverUrl: item.coverUrl,
+                    title: item.storyTitle,
+                    cornerRadius: 8,
+                    width: 50,
+                    height: 68
+                )
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -847,7 +824,7 @@ struct ContinueCard: View {
         }
         .padding(10)
         .background(Color.mlCard)
-        .cornerRadius(12)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
@@ -973,31 +950,13 @@ struct AudioCard: View {
         NavigationLink(destination: StoryDetailView(story: story)) {
         VStack(alignment: .leading, spacing: 9) {
             ZStack {
-                if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure, .empty:
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(LinearGradient(
-                                    colors: [colors.0, colors.1],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing))
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                    .frame(width: 148, height: 176)
-                    .cornerRadius(16)
-                } else {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(LinearGradient(
-                            colors: [colors.0, colors.1],
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 148, height: 176)
-                }
+                StoryCoverView(
+                    coverUrl: story.coverUrl,
+                    title: story.title,
+                    cornerRadius: 16,
+                    width: 148,
+                    height: 176
+                )
 
                 LinearGradient(
                     colors: [.clear, Color.black.opacity(0.55)],
@@ -1005,7 +964,7 @@ struct AudioCard: View {
                     endPoint: .bottom
                 )
                 .frame(width: 148, height: 176)
-                .cornerRadius(16)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
 
                 VStack {
                     Spacer()
@@ -1207,37 +1166,18 @@ struct SmallCard: View {
     let story: Story
 
     var body: some View {
-        let colors = getGradientForString(story.title)
         let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
         
         NavigationLink(destination: StoryDetailView(story: story)) {
         VStack(alignment: .leading, spacing: 7) {
             ZStack {
-                if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure, .empty:
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(LinearGradient(
-                                    colors: [colors.0, colors.1],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing))
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                    .frame(width: 108, height: 143)
-                    .cornerRadius(12)
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(LinearGradient(
-                            colors: [colors.0, colors.1],
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 108, height: 143)
-                }
+                StoryCoverView(
+                    coverUrl: story.coverUrl,
+                    title: story.title,
+                    cornerRadius: 12,
+                    width: 108,
+                    height: 143
+                )
 
                 if story.isHot || story.isFeatured {
                     VStack {
@@ -1296,30 +1236,6 @@ struct SectionHeader: View {
                     .foregroundStyle(Color.mlPurple)
             }
         }
-    }
-}
-
-// MARK: - Placeholder Tabs
-struct PlaceholderTab: View {
-    let icon:  String
-    let label: String
-
-    var body: some View {
-        ZStack {
-            Color.mlBg.ignoresSafeArea()
-            VStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 52))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.mlPurple, Color.mlPink],
-                            startPoint: .top, endPoint: .bottom))
-                Text(label)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.white)
-            }
-        }
-        .preferredColorScheme(.dark)
     }
 }
 

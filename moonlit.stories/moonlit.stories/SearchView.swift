@@ -276,23 +276,13 @@ private struct SearchStoryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if let urlString = story.coverUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(LinearGradient(colors: [Color.mlCard, Color.mlPurpleDim], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    }
-                }
-                .frame(width: 62, height: 84)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            } else {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(LinearGradient(colors: [Color.mlCard, Color.mlPurpleDim], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 62, height: 84)
-            }
+            StoryCoverView(
+                coverUrl: story.coverUrl,
+                title: story.title,
+                cornerRadius: 10,
+                width: 62,
+                height: 84
+            )
 
             VStack(alignment: .leading, spacing: 6) {
                 SearchLibraryStatusBadges(statuses: statuses)

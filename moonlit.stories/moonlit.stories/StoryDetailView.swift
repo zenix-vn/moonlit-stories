@@ -92,7 +92,7 @@ struct StoryDetailView: View {
                 overlayTopBar
             }
         }
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(item: $unlockTarget) { ep in
             UnlockEpisodeSheet(episode: ep, storyTitle: story.title) {
                 Task {
@@ -104,8 +104,10 @@ struct StoryDetailView: View {
             .presentationDragIndicator(.visible)
         }
         .task {
-            await viewModel.loadEpisodes(slug: story.slug)
-            await viewModel.loadSavedState(storyID: story.id)
+            // Load episodes and saved state in parallel
+            async let episodes: () = viewModel.loadEpisodes(slug: story.slug)
+            async let saved: () = viewModel.loadSavedState(storyID: story.id)
+            _ = await (episodes, saved)
         }
         .fullScreenCover(item: $selectedEpisode) { ep in
             EpisodeReaderView(episodeId: ep.id, story: story, episodes: viewModel.episodes)
@@ -117,7 +119,7 @@ struct StoryDetailView: View {
         ZStack(alignment: .bottomLeading) {
             // Cover image or gradient placeholder
             if let coverUrl = story.coverUrl, let url = URL(string: coverUrl) {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let img):
                         img.resizable().scaledToFill()
@@ -316,7 +318,7 @@ struct StoryDetailView: View {
                 }
                 .padding(.horizontal, 20)
                 .background(Color.mlCard.opacity(0.35))
-                .cornerRadius(16)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal, 20)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)

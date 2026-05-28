@@ -1,5 +1,44 @@
 import Foundation
 import UIKit
+import Security
+
+// MARK: - Keychain Helper
+
+private enum KeychainHelper {
+    static func save(_ value: String, forKey key: String) {
+        let data = Data(value.utf8)
+        let query: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrAccount: key,
+            kSecValueData:   data
+        ]
+        SecItemDelete(query as CFDictionary)
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    static func load(forKey key: String) -> String? {
+        let query: [CFString: Any] = [
+            kSecClass:            kSecClassGenericPassword,
+            kSecAttrAccount:      key,
+            kSecReturnData:       true,
+            kSecMatchLimit:       kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let string = String(data: data, encoding: .utf8) else { return nil }
+        return string
+    }
+
+    static func delete(forKey key: String) {
+        let query: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrAccount: key
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}
 
 // MARK: - API Network Models
 
@@ -427,37 +466,48 @@ class NetworkService {
     private let tokenKey = "ml_auth_token"
     private let deviceIdKey = "ml_device_uuid"
     
-    private init() {}
+    private init() {
+        // Migrate legacy token from UserDefaults → Keychain (one-time)
+        if let legacy = UserDefaults.standard.string(forKey: tokenKey) {
+            KeychainHelper.save(legacy, forKey: tokenKey)
+            UserDefaults.standard.removeObject(forKey: tokenKey)
+        }
+        // Migrate legacy deviceId from UserDefaults → Keychain (one-time)
+        if let legacy = UserDefaults.standard.string(forKey: deviceIdKey) {
+            KeychainHelper.save(legacy, forKey: deviceIdKey)
+            UserDefaults.standard.removeObject(forKey: deviceIdKey)
+        }
+    }
     
     // Check if token exists
     var hasToken: Bool {
-        return UserDefaults.standard.string(forKey: tokenKey) != nil
+        return KeychainHelper.load(forKey: tokenKey) != nil
     }
     
-    // Get stored token
+    // Get stored token (from Keychain)
     var token: String? {
-        return UserDefaults.standard.string(forKey: tokenKey)
+        return KeychainHelper.load(forKey: tokenKey)
     }
     
-    // Clear stored credentials
+    // Clear stored credentials from Keychain
     func logout() {
-        UserDefaults.standard.removeObject(forKey: tokenKey)
+        KeychainHelper.delete(forKey: tokenKey)
     }
     
-    // Helper to get or create stable device uuid
+    // Helper to get or create stable device uuid (stored in Keychain, persists across reinstalls)
     private func getOrCreateDeviceID() -> String {
-        if let savedID = UserDefaults.standard.string(forKey: deviceIdKey) {
+        if let savedID = KeychainHelper.load(forKey: deviceIdKey) {
             return savedID
         }
         let newID = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-        UserDefaults.standard.set(newID, forKey: deviceIdKey)
+        KeychainHelper.save(newID, forKey: deviceIdKey)
         return newID
     }
     
     // Perform guest login authentication
     func authenticateGuest() async throws -> GuestLoginResponse {
         let deviceID = getOrCreateDeviceID()
-        let osVersion = UIDevice.current.systemVersion
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0.0"
         let timezone = TimeZone.current.identifier
         
@@ -498,18 +548,22 @@ class NetworkService {
         let decoder = JSONDecoder()
         let authResponse = try decoder.decode(GuestLoginResponse.self, from: data)
         
-        // Save token to UserDefaults
-        UserDefaults.standard.set(authResponse.token, forKey: tokenKey)
+        // Save token securely to Keychain
+        KeychainHelper.save(authResponse.token, forKey: tokenKey)
         
         return authResponse
     }
     
     // Fetch home feed
-    func fetchHomeFeed() async throws -> HomeResponse {
+    func fetchHomeFeed(retryCount: Int = 0) async throws -> HomeResponse {
+        // Serve from cache if available
+        if let cached: HomeResponse = APICache.shared.get(APICache.Key.homeFeed) {
+            return cached
+        }
         guard let token = self.token else {
-            // No token found, attempt auto guest authentication first
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await fetchHomeFeed()
+            return try await fetchHomeFeed(retryCount: retryCount + 1)
         }
         
         let url = baseURL.appendingPathComponent("/v1/home")
@@ -524,9 +578,9 @@ class NetworkService {
         }
         
         if httpResponse.statusCode == 401 {
-            // Token might be expired, re-authenticate and retry
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await fetchHomeFeed()
+            return try await fetchHomeFeed(retryCount: retryCount + 1)
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -534,14 +588,17 @@ class NetworkService {
         }
         
         let decoder = JSONDecoder()
-        return try decoder.decode(HomeResponse.self, from: data)
+        let result = try decoder.decode(HomeResponse.self, from: data)
+        APICache.shared.set(APICache.Key.homeFeed, value: result, ttl: APICache.TTL.homeFeed)
+        return result
     }
     
     // Generic authenticated GET helper
-    private func authenticatedGet<T: Decodable>(_ path: String) async throws -> T {
+    private func authenticatedGet<T: Decodable>(_ path: String, retryCount: Int = 0) async throws -> T {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedGet(path)
+            return try await authenticatedGet(path, retryCount: retryCount + 1)
         }
         let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
         guard let url = URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL else {
@@ -555,8 +612,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedGet(path)
+            return try await authenticatedGet(path, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             if let errObj = try? JSONDecoder().decode([String: String].self, from: data),
@@ -568,10 +626,11 @@ class NetworkService {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func authenticatedPost<T: Decodable, U: Encodable>(_ path: String, body: U) async throws -> T {
+    private func authenticatedPost<T: Decodable, U: Encodable>(_ path: String, body: U, retryCount: Int = 0) async throws -> T {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedPost(path, body: body)
+            return try await authenticatedPost(path, body: body, retryCount: retryCount + 1)
         }
         let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
         guard let url = URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL else {
@@ -587,8 +646,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
 
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedPost(path, body: body)
+            return try await authenticatedPost(path, body: body, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
@@ -596,10 +656,11 @@ class NetworkService {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func authenticatedPostNoBody<T: Decodable>(_ path: String) async throws -> T {
+    private func authenticatedPostNoBody<T: Decodable>(_ path: String, retryCount: Int = 0) async throws -> T {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedPostNoBody(path)
+            return try await authenticatedPostNoBody(path, retryCount: retryCount + 1)
         }
         let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
         guard let url = URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL else {
@@ -613,8 +674,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
 
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedPostNoBody(path)
+            return try await authenticatedPostNoBody(path, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             if let errObj = try? JSONDecoder().decode([String: String].self, from: data),
@@ -626,10 +688,11 @@ class NetworkService {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func authenticatedPostNoContent<U: Encodable>(_ path: String, body: U) async throws {
+    private func authenticatedPostNoContent<U: Encodable>(_ path: String, body: U, retryCount: Int = 0) async throws {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedPostNoContent(path, body: body)
+            return try await authenticatedPostNoContent(path, body: body, retryCount: retryCount + 1)
         }
         let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
         guard let url = URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL else {
@@ -645,8 +708,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
 
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await authenticatedPostNoContent(path, body: body)
+            return try await authenticatedPostNoContent(path, body: body, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
@@ -655,7 +719,11 @@ class NetworkService {
     
     // Fetch episode list for a story (with access info)
     func fetchStoryEpisodes(slug: String) async throws -> [EpisodeMeta] {
-        return try await authenticatedGet("/v1/stories/\(slug)/episodes")
+        let cacheKey = APICache.Key.episodes(slug)
+        if let cached: [EpisodeMeta] = APICache.shared.get(cacheKey) { return cached }
+        let result: [EpisodeMeta] = try await authenticatedGet("/v1/stories/\(slug)/episodes")
+        APICache.shared.setTracked(cacheKey, value: result, ttl: APICache.TTL.episodes)
+        return result
     }
 
     func startReadingSession(storyID: String, episodeID: String) async throws -> String {
@@ -696,10 +764,11 @@ class NetworkService {
     }
     
     // Fetch full episode content
-    func fetchEpisodeDetail(episodeId: String) async throws -> EpisodeDetail {
+    func fetchEpisodeDetail(episodeId: String, retryCount: Int = 0) async throws -> EpisodeDetail {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await fetchEpisodeDetail(episodeId: episodeId)
+            return try await fetchEpisodeDetail(episodeId: episodeId, retryCount: retryCount + 1)
         }
 
         let url = baseURL.appendingPathComponent("/v1/episodes/\(episodeId)")
@@ -711,8 +780,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
 
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await fetchEpisodeDetail(episodeId: episodeId)
+            return try await fetchEpisodeDetail(episodeId: episodeId, retryCount: retryCount + 1)
         }
 
         let decoder = JSONDecoder()
@@ -734,17 +804,27 @@ class NetworkService {
     
     // Unlock episode with Coins
     func unlockEpisodeWithCoins(episodeId: String) async throws -> UnlockResponse {
-        return try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/coins")
+        let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/coins")
+        // Invalidate episode detail cache so hasAccess updates
+        APICache.shared.invalidate("episode_\(episodeId)")
+        APICache.shared.invalidate(APICache.Key.libraryMap)
+        return result
     }
 
     // Unlock episode with Free Pass
     func unlockEpisodeWithFreePass(episodeId: String) async throws -> UnlockResponse {
-        return try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/free-pass")
+        let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/free-pass")
+        APICache.shared.invalidate("episode_\(episodeId)")
+        APICache.shared.invalidate(APICache.Key.libraryMap)
+        return result
     }
 
     // Unlock episode with Ad
     func unlockEpisodeWithAd(episodeId: String) async throws -> UnlockResponse {
-        return try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/ad")
+        let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/ad")
+        APICache.shared.invalidate("episode_\(episodeId)")
+        APICache.shared.invalidate(APICache.Key.libraryMap)
+        return result
     }
 
     // Fetch active products/subscription packages
@@ -776,30 +856,38 @@ class NetworkService {
     
     // Fetch story detail by slug — backend returns { "story": {...}, "episodes": [...] }
     func fetchStoryBySlug(slug: String) async throws -> StoryDetail {
+        let cacheKey = APICache.Key.story(slug)
+        if let cached: StoryDetail = APICache.shared.get(cacheKey) { return cached }
         let envelope: StoryBySlugEnvelope = try await authenticatedGet("/v1/stories/\(slug)")
+        APICache.shared.set(cacheKey, value: envelope.story, ttl: APICache.TTL.stories)
         return envelope.story
     }
 
     // Fetch active genres for home taxonomy section
     func fetchGenres() async throws -> [Genre] {
-        return try await authenticatedGet("/v1/genres")
+        if let cached: [Genre] = APICache.shared.get(APICache.Key.genres) { return cached }
+        let result: [Genre] = try await authenticatedGet("/v1/genres")
+        APICache.shared.set(APICache.Key.genres, value: result, ttl: APICache.TTL.genres)
+        return result
     }
 
     // Fetch banners by placement
     func fetchBanners(placement: String) async throws -> [Banner] {
+        let cacheKey = APICache.Key.banners(placement)
+        if let cached: [Banner] = APICache.shared.get(cacheKey) { return cached }
         let encoded = placement.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? placement
         let banners: [Banner] = try await authenticatedGet("/v1/banners?placement=\(encoded)")
         #if DEBUG
         print("[BannerDebug] placement=\(placement), count=\(banners.count)")
-        for (index, banner) in banners.enumerated() {
-            print("[BannerDebug] \(placement)[\(index)] id=\(banner.id) title=\(banner.title) priority=\(banner.priority ?? -1) created_at=\(banner.createdAt ?? "nil") backendPlacement=\(banner.placement)")
-        }
         #endif
+        APICache.shared.set(cacheKey, value: banners, ttl: APICache.TTL.banners)
         return banners
     }
 
     // Discover stories for Search tab
     func fetchDiscoverStories(search: String? = nil, genre: String? = nil) async throws -> [Story] {
+        let cacheKey = APICache.Key.discover(search: search, genre: genre)
+        if let cached: [Story] = APICache.shared.get(cacheKey) { return cached }
         var queryItems: [URLQueryItem] = []
         if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             queryItems.append(URLQueryItem(name: "search", value: search.trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -816,7 +904,12 @@ class NetworkService {
                 path += "?\(query)"
             }
         }
-        return try await authenticatedGet(path)
+        let result: [Story] = try await authenticatedGet(path)
+        // Only cache if not a live search query (empty or genre-only filters)
+        if search == nil || search!.isEmpty {
+            APICache.shared.set(cacheKey, value: result, ttl: APICache.TTL.stories)
+        }
+        return result
     }
 
     // Library list for Library tab
@@ -831,6 +924,9 @@ class NetworkService {
 
     // Fetch all library statuses for badges
     func fetchLibraryStatusMap() async throws -> [String: Set<String>] {
+        if let cached: [String: Set<String>] = APICache.shared.get(APICache.Key.libraryMap) {
+            return cached
+        }
         async let savedTask = fetchLibrary(type: "saved")
         async let historyTask = fetchLibrary(type: "history")
         async let completedTask = fetchLibrary(type: "completed")
@@ -840,23 +936,19 @@ class NetworkService {
         let completed = try await completedTask
 
         var map: [String: Set<String>] = [:]
-        for item in saved {
-            map[item.storyID, default: []].insert("saved")
-        }
-        for item in history {
-            map[item.storyID, default: []].insert("history")
-        }
-        for item in completed {
-            map[item.storyID, default: []].insert("completed")
-        }
+        for item in saved     { map[item.storyID, default: []].insert("saved") }
+        for item in history   { map[item.storyID, default: []].insert("history") }
+        for item in completed { map[item.storyID, default: []].insert("completed") }
+        APICache.shared.set(APICache.Key.libraryMap, value: map, ttl: APICache.TTL.libraryMap)
         return map
     }
 
     // Save story into library
-    func addToLibrary(storyID: String, type: String = "saved") async throws {
+    func addToLibrary(storyID: String, type: String = "saved", retryCount: Int = 0) async throws {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await addToLibrary(storyID: storyID, type: type)
+            return try await addToLibrary(storyID: storyID, type: type, retryCount: retryCount + 1)
         }
 
         let url = baseURL.appendingPathComponent("/v1/library/save")
@@ -872,19 +964,23 @@ class NetworkService {
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await addToLibrary(storyID: storyID, type: type)
+            return try await addToLibrary(storyID: storyID, type: type, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
+        // Invalidate library cache so status badges refresh
+        APICache.shared.invalidate(APICache.Key.libraryMap)
     }
 
     // Remove story from library
-    func removeFromLibrary(storyID: String, type: String = "saved") async throws {
+    func removeFromLibrary(storyID: String, type: String = "saved", retryCount: Int = 0) async throws {
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await removeFromLibrary(storyID: storyID, type: type)
+            return try await removeFromLibrary(storyID: storyID, type: type, retryCount: retryCount + 1)
         }
 
         let encodedStoryID = storyID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? storyID
@@ -902,12 +998,15 @@ class NetworkService {
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await removeFromLibrary(storyID: storyID, type: type)
+            return try await removeFromLibrary(storyID: storyID, type: type, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
+        // Invalidate library cache
+        APICache.shared.invalidate(APICache.Key.libraryMap)
     }
 
     // Fetch profile details
@@ -921,7 +1020,7 @@ class NetworkService {
     }
     
     // Update profile details
-    func updateMe(displayName: String?, email: String?, bio: String?, preferences: ReaderPreferences?) async throws -> MeResponse {
+    func updateMe(displayName: String?, email: String?, bio: String?, preferences: ReaderPreferences?, retryCount: Int = 0) async throws -> MeResponse {
         struct UpdatePayload: Encodable {
             let display_name: String?
             let email: String?
@@ -931,8 +1030,9 @@ class NetworkService {
         let payload = UpdatePayload(display_name: displayName, email: email, bio: bio, reading_preference: preferences)
         
         guard let token = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await updateMe(displayName: displayName, email: email, bio: bio, preferences: preferences)
+            return try await updateMe(displayName: displayName, email: email, bio: bio, preferences: preferences, retryCount: retryCount + 1)
         }
         
         let url = baseURL.appendingPathComponent("/v1/me")
@@ -946,8 +1046,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await updateMe(displayName: displayName, email: email, bio: bio, preferences: preferences)
+            return try await updateMe(displayName: displayName, email: email, bio: bio, preferences: preferences, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
@@ -956,7 +1057,7 @@ class NetworkService {
     }
 
     // Register push token
-    func registerPushToken(token: String) async throws {
+    func registerPushToken(token: String, retryCount: Int = 0) async throws {
         struct RegisterPayload: Encodable {
             let token: String
             let platform: String
@@ -964,8 +1065,9 @@ class NetworkService {
         let payload = RegisterPayload(token: token, platform: "ios")
         
         guard let authToken = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await registerPushToken(token: token)
+            return try await registerPushToken(token: token, retryCount: retryCount + 1)
         }
         
         let url = baseURL.appendingPathComponent("/v1/notifications/register")
@@ -979,8 +1081,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await registerPushToken(token: token)
+            return try await registerPushToken(token: token, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
@@ -993,10 +1096,11 @@ class NetworkService {
     }
 
     // Open notification
-    func openNotification(id: String) async throws {
+    func openNotification(id: String, retryCount: Int = 0) async throws {
         guard let authToken = self.token else {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await openNotification(id: id)
+            return try await openNotification(id: id, retryCount: retryCount + 1)
         }
         
         let url = baseURL.appendingPathComponent("/v1/notifications/\(id)/open")
@@ -1008,8 +1112,9 @@ class NetworkService {
         guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         
         if httpResponse.statusCode == 401 {
+            guard retryCount < 1 else { throw URLError(.userAuthenticationRequired) }
             _ = try await authenticateGuest()
-            return try await openNotification(id: id)
+            return try await openNotification(id: id, retryCount: retryCount + 1)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)

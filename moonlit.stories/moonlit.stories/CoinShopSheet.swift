@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 struct CoinShopView: View {
     @Environment(\.dismiss) private var dismiss
@@ -94,7 +95,7 @@ struct CoinShopView: View {
                         }
                         .padding(.horizontal, 20)
                         
-                        Text("Secure mock verification is active. Purchases are credited instantly.")
+                        Text("Purchases are processed securely via Apple's App Store.")
                             .font(.system(size: 11))
                             .foregroundStyle(Color.mlSubtext.opacity(0.6))
                             .multilineTextAlignment(.center)
@@ -287,26 +288,65 @@ struct CoinShopView: View {
         isPurchasing = product.code
         
         Task {
-            // Simulate App Store authentication & processing delay
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            
             do {
-                let randomTx = "iap_" + UUID().uuidString.prefix(12).lowercased()
-                let response = try await NetworkService.shared.verifyIAPPurchase(
-                    productCode: product.code,
-                    transactionId: randomTx
-                )
+                // TODO: Map product.code to Apple productID configured in App Store Connect
+                // Replace "com.moonlit.stories." + product.code with your actual product identifiers
+                let appleProductID = "com.moonlit.stories." + product.code
+                let storeProducts = try await StoreKit.Product.products(for: [appleProductID])
                 
-                await MainActor.run {
-                    if let wallet = response.wallet {
-                        self.currentBalance = wallet.coins
+                guard let storeProduct = storeProducts.first else {
+                    await MainActor.run {
+                        self.errorMessage = "Product not found in App Store. Please try again later."
+                        isPurchasing = nil
                     }
-                    NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-                    isPurchasing = nil
-                    
-                    // Auto close sheet on successful purchase
-                    dismiss()
+                    return
                 }
+                
+                let result = try await storeProduct.purchase()
+                
+                switch result {
+                case .success(let verification):
+                    // Verify the transaction is legit (not tampered)
+                    let transaction: StoreKit.Transaction
+                    switch verification {
+                    case .verified(let tx):
+                        transaction = tx
+                    case .unverified:
+                        throw NSError(domain: "IAP", code: -1, userInfo: [NSLocalizedDescriptionKey: "Purchase could not be verified."])
+                    }
+                    
+                    // Send real transaction ID to server for server-side validation
+                    let txID = String(transaction.id)
+                    let response = try await NetworkService.shared.verifyIAPPurchase(
+                        productCode: product.code,
+                        transactionId: txID
+                    )
+                    
+                    // Finish the transaction with Apple
+                    await transaction.finish()
+                    
+                    await MainActor.run {
+                        if let wallet = response.wallet {
+                            self.currentBalance = wallet.coins
+                        }
+                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                        isPurchasing = nil
+                        dismiss()
+                    }
+                    
+                case .userCancelled:
+                    await MainActor.run { isPurchasing = nil }
+                    
+                case .pending:
+                    await MainActor.run {
+                        self.errorMessage = "Purchase is pending approval. You'll be notified when it's complete."
+                        isPurchasing = nil
+                    }
+                    
+                @unknown default:
+                    await MainActor.run { isPurchasing = nil }
+                }
+                
             } catch {
                 await MainActor.run {
                     self.errorMessage = "Purchase failed: \(error.localizedDescription)"
