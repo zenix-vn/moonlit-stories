@@ -115,6 +115,9 @@ struct EpisodeReaderView: View {
     private var cardBg: Color {
         settings.isDarkMode ? Color(red: 0.10, green: 0.07, blue: 0.16) : Color(red: 0.93, green: 0.89, blue: 0.83)
     }
+    private var activeEpisodeId: String {
+        selectedNewEpisodeId ?? episodeId
+    }
     private var activeParagraphIndex: Int {
         guard !paragraphs.isEmpty else { return 0 }
         if audioPlayer.isTTS {
@@ -156,22 +159,23 @@ struct EpisodeReaderView: View {
                                     errorView(message: err)
                                 }
 
-                            // Bottom nav
-                            bottomNav
-                                .padding(.top, 40)
+                                // Bottom nav
+                                bottomNav
+                                    .padding(.top, 40)
 
-                            Color.clear.frame(height: 50)
-                        }
-                        .padding(.top, 16)
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear
-                                    .onAppear { contentHeight = geo.size.height }
-                                    .onChange(of: geo.size.height) { _, newHeight in
-                                        contentHeight = newHeight
-                                    }
+                                Color.clear.frame(height: 50)
                             }
-                        )
+                            .padding(.top, 16)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear
+                                        .onAppear { contentHeight = geo.size.height }
+                                        .onChange(of: geo.size.height) { _, newHeight in
+                                            contentHeight = newHeight
+                                        }
+                                }
+                            )
+                        }
                     }
                     .coordinateSpace(name: "scroll")
                     .onPreferenceChange(ScrollOffsetKey.self) { val in
@@ -934,7 +938,7 @@ struct EpisodeReaderView: View {
         
         // Auto-unlock check
         if let ep = viewModel.episode, !ep.hasAccess, !ep.isFree, autoUnlockEpisodes {
-            await viewModel.unlockWithCoins(id: ep.id)
+            _ = await viewModel.unlockWithCoins(id: ep.id)
         }
         
         updateNavEpisodes()
