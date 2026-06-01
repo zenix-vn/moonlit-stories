@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { api } from "../../../lib/api";
 import {
   BookOpen, ArrowLeft, Save, Plus, Edit3, CheckCircle,
-  EyeOff, Globe, Archive, Trash2, Tag, Settings, ListOrdered, RefreshCw
+  EyeOff, Globe, Archive, Trash2, Tag, Settings, ListOrdered, RefreshCw,
+  Sparkles, Wand2
 } from "lucide-react";
 
-type Tab = "episodes" | "settings" | "taxonomy";
+type Tab = "episodes" | "settings" | "taxonomy" | "ai-context";
 
 export default function StoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -23,6 +24,15 @@ export default function StoryDetailPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("episodes");
+
+  // AI Context & Episode Generation State
+  const [aiContext, setAiContext] = useState<any>(null);
+  const [aiContextLoading, setAiContextLoading] = useState(false);
+  const [aiContextError, setAiContextError] = useState("");
+  const [aiGuidance, setAiGuidance] = useState("");
+  const [aiRevisionFeedback, setAiRevisionFeedback] = useState("");
+  const [aiWriting, setAiWriting] = useState(false);
+  const [episodeWriteMode, setEpisodeWriteMode] = useState<"manual" | "ai">("manual");
 
   // Edit Story Form State
   const [title, setTitle] = useState("");
@@ -110,9 +120,72 @@ export default function StoryDetailPage({ params }: { params: Promise<{ id: stri
     loadData();
   }, [id]);
 
+  const loadAIContext = async () => {
+    setAiContextLoading(true);
+    setAiContextError("");
+    try {
+      const data = await api.getAIContext(id);
+      setAiContext(data);
+    } catch (err: any) {
+      setAiContextError(err.message || "Failed to load AI Context. Is this story initialized with AI?");
+    } finally {
+      setAiContextLoading(false);
+    }
+  };
+
+  const handleGenerateNextEpisode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAiWriting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await api.generateAIEpisode(id, aiGuidance);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      notify(`Episode ${res.episode_number}: "${res.title}" successfully written and drafted by AI!`);
+      setAiGuidance("");
+      loadData();
+      if (aiContext) {
+        loadAIContext();
+      }
+    } catch (err: any) {
+      notify(err.message || "Failed to generate next episode using AI.", true);
+    } finally {
+      setAiWriting(false);
+    }
+  };
+
+  const handleRegenerateLastEpisode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiRevisionFeedback.trim()) return;
+    setAiWriting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await api.regenerateAIEpisode(id, aiRevisionFeedback);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      notify(`Episode ${res.episode_number}: "${res.title}" successfully rewritten by AI!`);
+      setAiRevisionFeedback("");
+      loadData();
+      if (aiContext) {
+        loadAIContext();
+      }
+    } catch (err: any) {
+      notify(err.message || "Failed to rewrite last episode using AI.", true);
+    } finally {
+      setAiWriting(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "taxonomy" && allGenres.length === 0) {
       loadTaxonomy();
+    }
+    if (activeTab === "ai-context" && !aiContext) {
+      loadAIContext();
     }
   }, [activeTab]);
 
@@ -284,6 +357,7 @@ export default function StoryDetailPage({ params }: { params: Promise<{ id: stri
       <div className="flex gap-1 border-b border-[#2d334a]">
         {([
           { key: "episodes", icon: ListOrdered, label: `Episodes (${episodes.length})` },
+          { key: "ai-context", icon: Sparkles, label: "AI Context" },
           { key: "settings", icon: Settings, label: "Settings" },
           { key: "taxonomy", icon: Tag, label: "Genres & Moods" },
         ] as { key: Tab; icon: any; label: string }[]).map(({ key, icon: Icon, label }) => (
@@ -383,62 +457,269 @@ export default function StoryDetailPage({ params }: { params: Promise<{ id: stri
           </div>
 
           {/* Quick Add Episode Form */}
-          <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md">
-            <h3 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
-              <Plus className="h-4 w-4 text-[#8b5cf6]" /> Write Next Episode
-            </h3>
-
-            <form onSubmit={handleCreateEpisode} className="space-y-4 text-sm">
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Ep #</label>
-                  <input type="number" required value={epNum}
-                    onChange={(e) => setEpNum(Number(e.target.value))}
-                    className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Episode Title</label>
-                  <input type="text" required value={epTitle}
-                    onChange={(e) => setEpTitle(e.target.value)}
-                    placeholder="e.g. The Prince's Gambit"
-                    className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none" />
-                </div>
+          <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md space-y-6">
+            <div className="flex items-center justify-between border-b border-[#2d334a] pb-3 flex-wrap gap-2">
+              <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                <Plus className="h-4 w-4 text-[#8b5cf6]" /> Write Next Episode
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEpisodeWriteMode("manual")}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold border transition-all ${
+                    episodeWriteMode === "manual"
+                      ? "bg-[#171b31] border-[#8b5cf6] text-white"
+                      : "bg-transparent border-[#2d334a] text-[#94a3b8] hover:text-white"
+                  }`}
+                >
+                  Manual Entry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEpisodeWriteMode("ai")}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold border transition-all flex items-center gap-1 ${
+                    episodeWriteMode === "ai"
+                      ? "bg-[#171b31] border-[#8b5cf6] text-white"
+                      : "bg-transparent border-[#2d334a] text-[#94a3b8] hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="h-3 w-3 text-[#8b5cf6]" />
+                  AI Ghostwriter
+                </button>
               </div>
+            </div>
 
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 text-sm text-slate-300 select-none cursor-pointer">
-                  <input type="checkbox" checked={epIsFree}
-                    onChange={(e) => { setEpIsFree(e.target.checked); if (e.target.checked) setEpCoinPrice(0); }}
-                    className="rounded border-[#2d334a] bg-[#171b31] text-[#8b5cf6]" />
-                  Free Episode
-                </label>
-                {!epIsFree && (
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-[#94a3b8]">Coins:</label>
-                    <input type="number" value={epCoinPrice}
-                      onChange={(e) => setEpCoinPrice(Number(e.target.value))}
-                      className="w-20 rounded-lg border border-[#2d334a] bg-[#171b31] py-1.5 px-2 text-white text-sm focus:border-[#8b5cf6] focus:outline-none" />
+            {episodeWriteMode === "manual" ? (
+              <form onSubmit={handleCreateEpisode} className="space-y-4 text-sm">
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Ep #</label>
+                    <input type="number" required value={epNum}
+                      onChange={(e) => setEpNum(Number(e.target.value))}
+                      className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none" />
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Episode Title</label>
+                    <input type="text" required value={epTitle}
+                      onChange={(e) => setEpTitle(e.target.value)}
+                      placeholder="e.g. The Prince's Gambit"
+                      className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none" />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <label className="flex items-center gap-2 text-sm text-slate-300 select-none cursor-pointer">
+                    <input type="checkbox" checked={epIsFree}
+                      onChange={(e) => { setEpIsFree(e.target.checked); if (e.target.checked) setEpCoinPrice(0); }}
+                      className="rounded border-[#2d334a] bg-[#171b31] text-[#8b5cf6]" />
+                    Free Episode
+                  </label>
+                  {!epIsFree && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-[#94a3b8]">Coins:</label>
+                      <input type="number" value={epCoinPrice}
+                        onChange={(e) => setEpCoinPrice(Number(e.target.value))}
+                        className="w-20 rounded-lg border border-[#2d334a] bg-[#171b31] py-1.5 px-2 text-white text-sm focus:border-[#8b5cf6] focus:outline-none" />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Content Body</label>
+                  <textarea required value={epText}
+                    onChange={(e) => setEpText(e.target.value)}
+                    rows={10}
+                    placeholder="Paste episode text here..."
+                    className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-3 px-4 font-serif text-slate-200 placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none resize-none" />
+                  <p className="mt-1 text-xs text-[#94a3b8]">{epText.split(/\s+/).filter(Boolean).length} words</p>
+                </div>
+
+                <button type="submit" disabled={addingEpisode}
+                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8b5cf6] to-[#a855f7] hover:from-[#7c3aed] hover:to-[#9333ea] py-2.5 px-5 font-semibold text-white shadow-md disabled:opacity-50 transition-all">
+                  <Plus className="h-4 w-4" />
+                  {addingEpisode ? "Saving..." : "Add Episode"}
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6 divide-y divide-[#2d334a]/60">
+                {/* 1. Generate Next Episode */}
+                <form onSubmit={handleGenerateNextEpisode} className="space-y-4 text-sm pb-6">
+                  <div>
+                    <p className="text-xs text-[#94a3b8] mb-4">
+                      AI will automatically write the next chapter (Episode {epNum}) based on the entire story's outline, characters, settings, and the summaries of all previous chapters.
+                    </p>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                      Plot Direction / Guidance (Optional)
+                    </label>
+                    <textarea
+                      value={aiGuidance}
+                      onChange={(e) => setAiGuidance(e.target.value)}
+                      rows={3}
+                      placeholder="E.g., 'Ensure a big argument breaks out between the leads about the hidden contract, ending on a dramatic note where she packs her bags to leave.' or leave blank for a natural progression."
+                      className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-3 px-4 text-slate-200 placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={aiWriting}
+                    className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8b5cf6] to-[#a855f7] hover:from-[#7c3aed] hover:to-[#9333ea] py-2.5 px-5 font-semibold text-white shadow-md disabled:opacity-50 transition-all"
+                  >
+                    {aiWriting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        AI is writing the chapter...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-4 w-4" />
+                        Write Episode {epNum} with AI
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* 2. Rewrite Last Episode */}
+                {episodes.length > 0 && (
+                  <form onSubmit={handleRegenerateLastEpisode} className="space-y-4 text-sm pt-6">
+                    <div>
+                      <h4 className="text-sm font-semibold text-white flex items-center gap-1.5 mb-1">
+                        <RefreshCw className="h-3.5 w-3.5 text-amber-400" />
+                        Rewrite Last Chapter (Episode {epNum - 1})
+                      </h4>
+                      <p className="text-xs text-[#94a3b8] mb-4">
+                        Not satisfied with the generated last chapter? Provide correction feedback below, and the AI will rewrite it completely, updating the database draft and context history logs.
+                      </p>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                        Revision Feedback / Instructions
+                      </label>
+                      <textarea
+                        value={aiRevisionFeedback}
+                        onChange={(e) => setAiRevisionFeedback(e.target.value)}
+                        rows={3}
+                        required
+                        placeholder="E.g., 'Make the conversation less aggressive' or 'Make the ending more suspenseful. Keep the focus on their relationship conflict.'"
+                        className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-3 px-4 text-slate-200 placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={aiWriting}
+                      className="flex items-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 py-2 px-4 font-semibold text-white shadow-md disabled:opacity-50 transition-all text-xs"
+                    >
+                      {aiWriting ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                           Rewriting Chapter...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="h-3.5 w-3.5" />
+                          Rewrite Episode {epNum - 1} with AI Feedback
+                        </>
+                      )}
+                    </button>
+                  </form>
                 )}
               </div>
+            )}
+          </div>
+        </div>
+      )}
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Content Body</label>
-                <textarea required value={epText}
-                  onChange={(e) => setEpText(e.target.value)}
-                  rows={10}
-                  placeholder="Paste episode text here..."
-                  className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-3 px-4 font-serif text-slate-200 placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none resize-none" />
-                <p className="mt-1 text-xs text-[#94a3b8]">{epText.split(/\s+/).filter(Boolean).length} words</p>
+      {/* ====== TAB: AI CONTEXT ====== */}
+      {activeTab === "ai-context" && (
+        <div className="space-y-6 max-w-4xl">
+          {aiContextLoading ? (
+            <div className="flex h-40 items-center justify-center text-[#8b5cf6]">
+              <RefreshCw className="h-6 w-6 animate-spin" />
+            </div>
+          ) : aiContextError ? (
+            <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-6 text-sm text-yellow-400">
+              <div className="flex items-center gap-2 mb-2 font-semibold">
+                <Sparkles className="h-5 w-5" />
+                AI Context Not Available
+              </div>
+              <p className="text-slate-300">
+                This story doesn't have an AI context record associated with it. AI context is generated automatically when stories are initialized using the AI Story Planner on the Stories list page.
+              </p>
+            </div>
+          ) : aiContext ? (
+            <>
+              {/* Context Summary Cards */}
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Outline */}
+                <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md">
+                  <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-[#8b5cf6]" /> Story Outline
+                  </h3>
+                  <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line bg-[#171b31] border border-[#2d334a]/40 rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                    {aiContext.outline}
+                  </div>
+                </div>
+
+                {/* Setting */}
+                <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md">
+                  <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-emerald-400" /> World Setting & Lore
+                  </h3>
+                  <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line bg-[#171b31] border border-[#2d334a]/40 rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                    {aiContext.setting}
+                  </div>
+                </div>
               </div>
 
-              <button type="submit" disabled={addingEpisode}
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8b5cf6] to-[#a855f7] hover:from-[#7c3aed] hover:to-[#9333ea] py-2.5 px-5 font-semibold text-white shadow-md disabled:opacity-50 transition-all">
-                <Plus className="h-4 w-4" />
-                {addingEpisode ? "Saving..." : "Add Episode"}
-              </button>
-            </form>
-          </div>
+              {/* Characters */}
+              <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md">
+                <h3 className="text-base font-semibold text-white mb-4">Character Profiles</h3>
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                  {aiContext.characters?.map((c: any, idx: number) => (
+                    <div key={idx} className="bg-[#171b31] border border-[#2d334a]/60 rounded-xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                          <span className="font-semibold text-white">{c.name}</span>
+                          <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                            {c.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#94a3b8] leading-relaxed">{c.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Episode Progression log (Context Tracking) */}
+              <div className="rounded-xl border border-[#2d334a] bg-[#101426] p-6 shadow-md">
+                <h3 className="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                  <ListOrdered className="h-4 w-4 text-[#8b5cf6]" /> Chronological Episode Summaries
+                </h3>
+                <p className="text-xs text-[#94a3b8] mb-5">
+                  This chronological log stores summaries of all AI-generated episodes. The AI reads this context before writing each chapter to maintain plot consistency and avoid repetitions.
+                </p>
+
+                <div className="space-y-4">
+                  {aiContext.episode_summaries?.map((s: any, idx: number) => (
+                    <div key={idx} className="flex gap-4 items-start bg-[#171b31] border border-[#2d334a]/40 rounded-xl p-4">
+                      <div className="flex-shrink-0 bg-[#8b5cf6]/10 border border-[#8b5cf6]/30 text-[#8b5cf6] font-mono text-xs rounded-lg px-2.5 py-1">
+                        Ep {s.episode_number}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-white text-sm">{s.title}</h4>
+                        <p className="text-xs text-[#94a3b8] mt-1.5 leading-relaxed">{s.summary}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {(!aiContext.episode_summaries || aiContext.episode_summaries.length === 0) && (
+                    <div className="text-center py-6 text-xs text-[#94a3b8]">
+                      No AI-generated episode summaries logged yet. Generate the first episode using the AI Ghostwriter in the Episodes tab!
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 

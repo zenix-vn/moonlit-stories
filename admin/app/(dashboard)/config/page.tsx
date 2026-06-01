@@ -230,6 +230,24 @@ export default function ConfigPage() {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                OpenRouter API Key
+              </label>
+              <input
+                type="password"
+                value={config.openrouter_api_key || ""}
+                onChange={(e) =>
+                  setConfig({ ...config, openrouter_api_key: e.target.value })
+                }
+                placeholder="sk-or-v1-..."
+                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white focus:border-[#8b5cf6] focus:outline-none font-mono text-xs"
+              />
+              <p className="text-[11px] text-[#94a3b8] mt-1.5">
+                Required for AI-powered story outline generation and automated episode ghostwriting.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
                 Minimum App Build Version
               </label>
               <input

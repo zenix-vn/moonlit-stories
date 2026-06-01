@@ -241,7 +241,10 @@ struct EpisodeReaderView: View {
             Task { await loadAndSyncEpisode(id: newId) }
         }
         .onDisappear {
-            Task { await finalizeReadingSession() }
+            Task {
+                await finalizeReadingSession()
+                NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+            }
             audioPlayer.stop()
         }
         .sheet(isPresented: $showingShopSheet) {
@@ -404,7 +407,7 @@ struct EpisodeReaderView: View {
 
             // Episode body text
             if ep.hasAccess, let content = ep.contentText, !content.isEmpty {
-                Text(content)
+                Text(cleanHTMLTags(content))
                     .font(.system(size: settings.fontSize, design: settings.isSerifFont ? .serif : .default))
                     .foregroundStyle(textColor)
                     .lineSpacing(settings.lineSpacing)
@@ -413,7 +416,7 @@ struct EpisodeReaderView: View {
             } else if let preview = ep.previewText, !preview.isEmpty {
                 // Locked episode — show preview + blur fade
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(preview)
+                    Text(cleanHTMLTags(preview))
                         .font(.system(size: settings.fontSize, design: settings.isSerifFont ? .serif : .default))
                         .foregroundStyle(textColor)
                         .lineSpacing(settings.lineSpacing)
@@ -872,6 +875,19 @@ struct EpisodeReaderView: View {
         
         updateNavEpisodes()
         await beginReadingSessionIfPossible()
+        
+        // Save initial progress immediately so backend knows they are on this episode!
+        if let ep = viewModel.episode {
+            Task {
+                try? await NetworkService.shared.updateReadingProgress(
+                    storyID: story.id,
+                    episodeID: ep.id,
+                    progressPercent: 0.0,
+                    currentPosition: 0
+                )
+            }
+        }
+        
         if let ep = viewModel.episode, let url = ep.audioUrl {
             audioPlayer.load(
                 urlString: url,
@@ -980,4 +996,14 @@ extension View {
         episodes: []
     )
     .preferredColorScheme(.dark)
+}
+
+private func cleanHTMLTags(_ text: String) -> String {
+    var cleaned = text
+    cleaned = cleaned.replacingOccurrences(of: "<p>", with: "")
+    cleaned = cleaned.replacingOccurrences(of: "</p>", with: "\n\n")
+    cleaned = cleaned.replacingOccurrences(of: "<br>", with: "\n")
+    cleaned = cleaned.replacingOccurrences(of: "<br/>", with: "\n")
+    cleaned = cleaned.replacingOccurrences(of: "<br />", with: "\n")
+    return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
 }

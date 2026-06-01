@@ -22,6 +22,7 @@ import (
 	"moonlit-backend/internal/rewards"
 	"moonlit-backend/internal/wallet"
 	"moonlit-backend/internal/subscription"
+	"moonlit-backend/internal/ai"
 )
 
 func main() {
@@ -76,6 +77,7 @@ func main() {
 	bannerHandler := &banner.BannerConfigHandler{DB: db}
 	subHandler := &subscription.SubscriptionHandler{DB: db}
 	analyticsHandler := &analytics.AnalyticsHandler{DB: db}
+	aiHandler := &ai.AIHandler{DB: db}
 
 	// =========================================================================
 	// PUBLIC AND WEBHOOK ROUTING (UNAUTHENTICATED)
@@ -201,6 +203,13 @@ func main() {
 	adminGroup.PATCH("/app-config/:key", bannerHandler.AdminUpdateAppConfig, auth.HasRoleCheck("editor", "super_admin"))
 	adminGroup.GET("/feature-flags", bannerHandler.AdminGetFeatureFlags, auth.HasRoleCheck("editor", "super_admin"))
 	adminGroup.PATCH("/feature-flags/:key", bannerHandler.AdminUpdateFeatureFlag, auth.HasRoleCheck("editor", "super_admin"))
+
+	// AI story generation
+	adminGroup.POST("/ai/stories/generate-outline", aiHandler.GenerateOutline, auth.HasRoleCheck("editor"))
+	adminGroup.POST("/ai/stories/save-outline", aiHandler.SaveOutline, auth.HasRoleCheck("editor"))
+	adminGroup.GET("/ai/stories/:id/context", aiHandler.GetAIContext, auth.HasRoleCheck("editor"))
+	adminGroup.POST("/ai/stories/:id/generate-episode", aiHandler.GenerateNextEpisode, auth.HasRoleCheck("editor"))
+	adminGroup.POST("/ai/stories/:id/regenerate-episode", aiHandler.RegenerateLastEpisode, auth.HasRoleCheck("editor"))
 
 	// 5. Start HTTP Server
 	portAddr := fmt.Sprintf(":%s", cfg.Port)

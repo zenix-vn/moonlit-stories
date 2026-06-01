@@ -244,8 +244,8 @@ struct WalletStatusCard: View {
                 
                 Button(action: onTopUpTapped) {
                     HStack(spacing: 4) {
-                        Image(systemName: "plus.circle.fill")
-                        Text("Top Up")
+                        Image(systemName: "gift.fill")
+                        Text("Earn Coins")
                     }
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Color.white)
@@ -394,9 +394,9 @@ struct ProfileMenuList: View {
             // Link to Coin shop
             Button(action: onBuyCoinsTapped) {
                 ProfileMenuRow(
-                    icon: "cart.fill",
+                    icon: "creditcard.fill",
                     color: Color.mlGold,
-                    title: "Buy Coins & Passes"
+                    title: "Coin Wallet"
                 )
             }
             .buttonStyle(.plain)

@@ -74,14 +74,15 @@ func (h *AuthHandler) GuestLogin(c echo.Context) error {
 
 		// Generate User ID
 		newUserID := uuid.New()
+		usernameGen := "user_" + newUserID.String()[:8]
 
 		// Create user record
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO users (id, auth_provider, status, level, created_at, updated_at)
-			VALUES ($1, 'guest', 'active', 1, now(), now())
-		`, newUserID)
+			INSERT INTO users (id, username, auth_provider, status, level, created_at, updated_at)
+			VALUES ($1, $2, 'guest', 'active', 1, now(), now())
+		`, newUserID, usernameGen)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create user"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create user: " + err.Error()})
 		}
 
 		// Create user profile
@@ -91,16 +92,16 @@ func (h *AuthHandler) GuestLogin(c echo.Context) error {
 			VALUES ($1, $2, $3, $4, $5, 'en', now(), now())
 		`, newUserID, displayName, req.CountryCode, req.CountryName, req.Timezone)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create profile"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create profile: " + err.Error()})
 		}
 
-		// Create wallet with 100 free starter coins as a welcome gift
+		// Create wallet with 500 free starter coins as a welcome gift
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO wallets (user_id, coins, gems, free_pass, updated_at)
-			VALUES ($1, 100, 0, 0, now())
+			VALUES ($1, 500, 0, 0, now())
 		`, newUserID)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create wallet"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create wallet: " + err.Error()})
 		}
 
 		// Create streak record
@@ -109,7 +110,7 @@ func (h *AuthHandler) GuestLogin(c echo.Context) error {
 			VALUES ($1, 0, 0, now())
 		`, newUserID)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create streak record"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create streak record: " + err.Error()})
 		}
 
 		// Create device record
@@ -118,13 +119,13 @@ func (h *AuthHandler) GuestLogin(c echo.Context) error {
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 		`, newUserID, req.DeviceID, req.Platform, req.OSVersion, req.AppVersion, req.FCMToken, req.CountryCode, req.CountryName, c.RealIP())
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to register device"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to register device: " + err.Error()})
 		}
 
 		// Log ledger transaction for starter coins
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO wallet_transactions (user_id, currency_type, amount, balance_after, reason, ref_type, ref_id, created_at)
-			VALUES ($1, 'coins', 100, 100, 'starter_bonus', 'users', $1, now())
+			VALUES ($1, 'coins', 500, 500, 'starter_bonus', 'users', $1, now())
 		`, newUserID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to log wallet transaction"})

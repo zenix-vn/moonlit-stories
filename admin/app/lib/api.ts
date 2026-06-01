@@ -265,4 +265,37 @@ export const api = {
       json: campaign,
     });
   },
+
+  // AI Story Generation
+  generateAIStoryOutline: async (prompt: string) => {
+    return apiFetch("/admin/ai/stories/generate-outline", {
+      method: "POST",
+      json: { prompt },
+    });
+  },
+
+  saveAIStoryOutline: async (outline: any) => {
+    return apiFetch("/admin/ai/stories/save-outline", {
+      method: "POST",
+      json: outline,
+    });
+  },
+
+  getAIContext: async (storyId: string) => {
+    return apiFetch(`/admin/ai/stories/${storyId}/context`);
+  },
+
+  generateAIEpisode: async (storyId: string, guidance?: string) => {
+    return apiFetch(`/admin/ai/stories/${storyId}/generate-episode`, {
+      method: "POST",
+      json: { guidance },
+    });
+  },
+
+  regenerateAIEpisode: async (storyId: string, guidance?: string) => {
+    return apiFetch(`/admin/ai/stories/${storyId}/regenerate-episode`, {
+      method: "POST",
+      json: { guidance },
+    });
+  },
 };

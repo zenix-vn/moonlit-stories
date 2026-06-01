@@ -16,30 +16,54 @@ extension Color {
 // MARK: - Root View
 struct HomeView: View {
     @State private var tab = 0
+    @StateObject private var viewModel = HomeViewModel()
+    @State private var isShowingReader = false
 
     var body: some View {
-        TabView(selection: $tab) {
-            MainHomeTab(selectedTab: $tab)
-                .tabItem { Label("Home",    systemImage: "house.fill") }
-                .tag(0)
-            SearchTabView()
-                .tabItem { Label("Search",  systemImage: "magnifyingglass") }
-                .tag(1)
-            LibraryTabView()
-                .tabItem { Label("Library", systemImage: "books.vertical.fill") }
-                .tag(2)
-            ProfileView()
-                .tabItem { Label("Profile", systemImage: "person.fill") }
-                .tag(3)
+        ZStack(alignment: .bottom) {
+            TabView(selection: $tab) {
+                MainHomeTab(selectedTab: $tab, viewModel: viewModel)
+                    .tabItem { Label("Home",    systemImage: "house.fill") }
+                    .tag(0)
+                SearchTabView()
+                    .tabItem { Label("Search",  systemImage: "magnifyingglass") }
+                    .tag(1)
+                LibraryTabView()
+                    .tabItem { Label("Library", systemImage: "books.vertical.fill") }
+                    .tag(2)
+                ProfileView()
+                    .tabItem { Label("Profile", systemImage: "person.fill") }
+                    .tag(3)
+            }
+            .tint(Color.mlPurple)
+            .preferredColorScheme(.dark)
+            .task {
+                // Pre-warm keyboard service so first tap on Search is instant.
+                // becomeFirstResponder + immediate resignFirstResponder boots the keyboard
+                // process without showing any animation.
+                try? await Task.sleep(for: .seconds(1.5))
+                await MainActor.run { prewarmKeyboard() }
+            }
+
+            if let recentItem = viewModel.continueReading.first {
+                BottomContinueReadingBar(item: recentItem) {
+                    isShowingReader = true
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 58) // Sits above bottom TabBar
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.continueReading.first?.storyId)
+            }
         }
-        .tint(Color.mlPurple)
-        .preferredColorScheme(.dark)
-        .task {
-            // Pre-warm keyboard service so first tap on Search is instant.
-            // becomeFirstResponder + immediate resignFirstResponder boots the keyboard
-            // process without showing any animation.
-            try? await Task.sleep(for: .seconds(1.5))
-            await MainActor.run { prewarmKeyboard() }
+        .sheet(isPresented: $isShowingReader, onDismiss: {
+            NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+        }) {
+            if let recentItem = viewModel.continueReading.first {
+                NavigationStack {
+                    ContinueReadingDestinationView(item: recentItem)
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
         }
     }
 
@@ -60,7 +84,7 @@ struct HomeView: View {
 // MARK: - Main Home Tab
 struct MainHomeTab: View {
     @Binding var selectedTab: Int
-    @StateObject private var viewModel = HomeViewModel()
+    @ObservedObject var viewModel: HomeViewModel
     @State private var selectedGenreFilter: String? = nil
 
     private func filteredStories(_ stories: [Story]) -> [Story] {
@@ -140,8 +164,8 @@ struct MainHomeTab: View {
                         .frame(maxWidth: .infinity, minHeight: 400)
                     } else {
                         VStack(spacing: 26) {
-                            HeroBanner(
-                                banner: viewModel.topBanners.first ?? viewModel.banners.first,
+                            TopBannersSlider(
+                                banners: viewModel.topBanners.isEmpty ? (viewModel.banners.isEmpty ? [] : viewModel.banners) : viewModel.topBanners,
                                 heroCard: viewModel.heroCard
                             )
                             
@@ -209,6 +233,12 @@ struct MainHomeTab: View {
             }
             .task {
                 await viewModel.loadFeed()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WalletBalanceChanged"))) { _ in
+                APICache.shared.invalidate(APICache.Key.homeFeed)
+                Task {
+                    await viewModel.loadFeed()
+                }
             }
 
             TopNav(wallet: viewModel.wallet, onProfileTap: {
@@ -472,6 +502,43 @@ struct HeroBanner: View {
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
         .padding(.horizontal, 20)
+    }
+}
+
+// MARK: - Top Banners Slider
+struct TopBannersSlider: View {
+    let banners: [Banner]
+    let heroCard: HomeHeroCard?
+    @State private var page = 0
+
+    var body: some View {
+        let displayBanners = banners
+        
+        if displayBanners.isEmpty {
+            HeroBanner(banner: nil, heroCard: heroCard)
+        } else {
+            VStack(spacing: 12) {
+                TabView(selection: $page) {
+                    ForEach(Array(displayBanners.enumerated()), id: \.element.id) { i, banner in
+                        HeroBanner(banner: banner, heroCard: nil)
+                            .tag(i)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: 190)
+
+                if displayBanners.count > 1 {
+                    HStack(spacing: 6) {
+                        ForEach(0..<displayBanners.count, id: \.self) { i in
+                            Capsule()
+                                .fill(i == page ? Color.mlPurple : Color.white.opacity(0.25))
+                                .frame(width: i == page ? 20 : 6, height: 6)
+                                .animation(.spring(duration: 0.3), value: page)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1236,6 +1303,75 @@ struct SectionHeader: View {
                     .foregroundStyle(Color.mlPurple)
             }
         }
+    }
+}
+
+// MARK: - Bottom Continue Reading Bar
+struct BottomContinueReadingBar: View {
+    let item: ContinueReadingItem
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Cover thumbnail
+                StoryCoverView(
+                    coverUrl: item.coverUrl,
+                    title: item.storyTitle,
+                    cornerRadius: 6,
+                    width: 32,
+                    height: 44
+                )
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("CONTINUE READING")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(Color.mlPurple)
+                        .tracking(1.2)
+                    
+                    Text(item.storyTitle)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                    
+                    Text("Ep. \(item.episodeNumber) · \(item.episodeTitle)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.mlSubtext)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                // Progress indicator circle and play icon
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 3)
+                        .frame(width: 28, height: 28)
+                    Circle()
+                        .trim(from: 0.0, to: CGFloat(min(max(item.progressPercent / 100.0, 0.0), 1.0)))
+                        .stroke(Color.mlPurple, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .frame(width: 28, height: 28)
+                        .rotationEffect(.degrees(-90))
+                    
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .offset(x: 1)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.mlCard.opacity(0.95))
+                    .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 5)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

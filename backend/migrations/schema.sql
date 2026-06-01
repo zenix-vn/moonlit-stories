@@ -620,6 +620,16 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS story_ai_contexts (
+  story_id UUID PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
+  outline TEXT NOT NULL,
+  characters JSONB NOT NULL DEFAULT '[]'::jsonb,
+  setting TEXT NOT NULL,
+  episode_summaries JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- =========================================================================
 -- INDEXES FOR PERFORMANCE
 -- =========================================================================
@@ -751,6 +761,17 @@ INSERT INTO banners (id, title, subtitle, image_url, deep_link, placement, prior
     'moonlit://story/reborn-as-the-villain-queen',
     'home_top',
     5,
+    true,
+    now() - interval '1 day'
+  ),
+  (
+    '70000000-0000-0000-0000-000000000003',
+    '1000+ Werewolf Novels',
+    'Romance stories · Love episodes',
+    'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?q=80&w=900',
+    'moonlit://discover',
+    'home_top',
+    4,
     true,
     now() - interval '1 day'
   ),
