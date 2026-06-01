@@ -24,7 +24,7 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
     private var ttsText: String = ""
     private var synthesizer: AVSpeechSynthesizer?
     private var ttsUtterance: AVSpeechUtterance?
-    private var currentCharacterIndex: Int = 0
+    var currentCharacterIndex: Int = 0
     private var ttsOffset: Int = 0
 
     // Metadata shown on lock screen / Control Center

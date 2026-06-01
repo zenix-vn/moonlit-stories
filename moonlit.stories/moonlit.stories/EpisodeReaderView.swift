@@ -96,6 +96,8 @@ struct EpisodeReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("autoUnlockEpisodes") private var autoUnlockEpisodes = false
     @State private var showingShopSheet = false
+    @State private var paragraphs: [String] = []
+    @State private var paragraphOffsets: [Int] = []
 
     // Floating audio bubble
     @State private var bubblePos: CGPoint = .zero          // set on appear
@@ -113,8 +115,21 @@ struct EpisodeReaderView: View {
     private var cardBg: Color {
         settings.isDarkMode ? Color(red: 0.10, green: 0.07, blue: 0.16) : Color(red: 0.93, green: 0.89, blue: 0.83)
     }
-    private var activeEpisodeId: String {
-        selectedNewEpisodeId ?? episodeId
+    private var activeParagraphIndex: Int {
+        guard !paragraphs.isEmpty else { return 0 }
+        if audioPlayer.isTTS {
+            let charIdx = audioPlayer.currentCharacterIndex
+            for i in (0..<paragraphs.count).reversed() {
+                if charIdx >= paragraphOffsets[i] {
+                    return i
+                }
+            }
+            return 0
+        } else {
+            let progress = audioPlayer.progress
+            let idx = Int(progress * Double(paragraphs.count))
+            return min(max(idx, 0), paragraphs.count - 1)
+        }
     }
 
     var body: some View {
@@ -123,22 +138,23 @@ struct EpisodeReaderView: View {
 
             // Main reading scroll
             GeometryReader { outer in
-                ScrollView(showsIndicators: false) {
-                    ZStack(alignment: .top) {
-                        GeometryReader { inner in
-                            Color.clear
-                                .preference(key: ScrollOffsetKey.self, value: inner.frame(in: .named("scroll")).minY)
-                        }
-                        .frame(height: 0)
-
-                        VStack(alignment: .leading, spacing: 0) {
-                            if viewModel.isLoading {
-                                readerSkeleton
-                            } else if let ep = viewModel.episode {
-                                readerContent(ep: ep)
-                            } else if let err = viewModel.errorMessage {
-                                errorView(message: err)
+                ScrollViewReader { scrollProxy in
+                    ScrollView(showsIndicators: false) {
+                        ZStack(alignment: .top) {
+                            GeometryReader { inner in
+                                Color.clear
+                                    .preference(key: ScrollOffsetKey.self, value: inner.frame(in: .named("scroll")).minY)
                             }
+                            .frame(height: 0)
+
+                            VStack(alignment: .leading, spacing: 0) {
+                                if viewModel.isLoading {
+                                    readerSkeleton
+                                } else if let ep = viewModel.episode {
+                                    readerContent(ep: ep)
+                                } else if let err = viewModel.errorMessage {
+                                    errorView(message: err)
+                                }
 
                             // Bottom nav
                             bottomNav
@@ -157,25 +173,32 @@ struct EpisodeReaderView: View {
                             }
                         )
                     }
-                }
-                .coordinateSpace(name: "scroll")
-                .onPreferenceChange(ScrollOffsetKey.self) { val in
-                    // Direction-based: dùng ref class tránh vấn đề @State capture
-                    let delta = val - readerScrollRef.offset
-                    readerScrollRef.offset = val
-                    if val > -40 {
-                        if !showTopBar { withAnimation(.easeInOut(duration: 0.25)) { showTopBar = true } }
-                    } else if abs(delta) > 6 {
-                        let shouldShow = delta > 0
-                        if shouldShow != showTopBar {
-                            withAnimation(.easeInOut(duration: 0.25)) { showTopBar = shouldShow }
+                    .coordinateSpace(name: "scroll")
+                    .onPreferenceChange(ScrollOffsetKey.self) { val in
+                        // Direction-based: dùng ref class tránh vấn đề @State capture
+                        let delta = val - readerScrollRef.offset
+                        readerScrollRef.offset = val
+                        if val > -40 {
+                            if !showTopBar { withAnimation(.easeInOut(duration: 0.25)) { showTopBar = true } }
+                        } else if abs(delta) > 6 {
+                            let shouldShow = delta > 0
+                            if shouldShow != showTopBar {
+                                withAnimation(.easeInOut(duration: 0.25)) { showTopBar = shouldShow }
+                            }
+                        }
+                        let scrolled = -val
+                        let total = max(1, contentHeight - outer.size.height)
+                        viewModel.readProgress = min(1.0, max(0, scrolled / total))
+                    }
+                    .onAppear { viewportHeight = outer.size.height }
+                    .onChange(of: activeParagraphIndex) { _, newIdx in
+                        if audioPlayer.isPlaying {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                scrollProxy.scrollTo(newIdx, anchor: .center)
+                            }
                         }
                     }
-                    let scrolled = -val
-                    let total = max(1, contentHeight - outer.size.height)
-                    viewModel.readProgress = min(1.0, max(0, scrolled / total))
                 }
-                .onAppear { viewportHeight = outer.size.height }
             }
 
             // Reading progress bar
@@ -243,6 +266,7 @@ struct EpisodeReaderView: View {
         .onChange(of: viewModel.episode?.hasAccess) { oldHasAccess, newHasAccess in
             if newHasAccess == true, oldHasAccess != true {
                 if let ep = viewModel.episode {
+                    parseParagraphs(from: ep)
                     if let url = ep.audioUrl, !url.isEmpty {
                         audioPlayer.load(
                             urlString: url,
@@ -426,13 +450,29 @@ struct EpisodeReaderView: View {
                 .padding(.bottom, 32)
 
             // Episode body text
-            if ep.hasAccess, let content = ep.contentText, !content.isEmpty {
-                Text(cleanHTMLTags(content))
-                    .font(.system(size: settings.fontSize, design: settings.isSerifFont ? .serif : .default))
-                    .foregroundStyle(textColor)
-                    .lineSpacing(settings.lineSpacing)
+            if ep.hasAccess {
+                if !paragraphs.isEmpty {
+                    VStack(alignment: .leading, spacing: settings.lineSpacing * 1.5) {
+                        ForEach(0..<paragraphs.count, id: \.self) { i in
+                            let isActive = audioPlayer.isPlaying && activeParagraphIndex == i
+                            Text(paragraphs[i])
+                                .id(i)
+                                .font(.system(size: settings.fontSize, design: settings.isSerifFont ? .serif : .default))
+                                .foregroundStyle(textColor)
+                                .lineSpacing(settings.lineSpacing)
+                                .opacity(audioPlayer.isPlaying ? (isActive ? 1.0 : 0.45) : 1.0)
+                                .animation(.easeInOut(duration: 0.3), value: isActive)
+                        }
+                    }
                     .padding(.horizontal, 24)
-                    .fixedSize(horizontal: false, vertical: true)
+                } else if let content = ep.contentText, !content.isEmpty {
+                    Text(cleanHTMLTags(content))
+                        .font(.system(size: settings.fontSize, design: settings.isSerifFont ? .serif : .default))
+                        .foregroundStyle(textColor)
+                        .lineSpacing(settings.lineSpacing)
+                        .padding(.horizontal, 24)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else if let preview = ep.previewText, !preview.isEmpty {
                 // Locked episode — show preview + blur fade
                 VStack(alignment: .leading, spacing: 0) {
@@ -888,6 +928,10 @@ struct EpisodeReaderView: View {
         audioPlayer.stop()
         await viewModel.loadEpisode(id: id)
         
+        if let ep = viewModel.episode {
+            parseParagraphs(from: ep)
+        }
+        
         // Auto-unlock check
         if let ep = viewModel.episode, !ep.hasAccess, !ep.isFree, autoUnlockEpisodes {
             await viewModel.unlockWithCoins(id: ep.id)
@@ -978,6 +1022,29 @@ struct EpisodeReaderView: View {
         readingSessionID = nil
         readingSessionStartedAt = nil
         readingProgressStart = 0
+    }
+
+    private func parseParagraphs(from ep: EpisodeDetail) {
+        if let content = ep.contentText, !content.isEmpty {
+            let cleaned = cleanHTMLTags(content)
+            let rawParagraphs = cleaned.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            
+            var currentIdx = 0
+            var tempParagraphs: [String] = []
+            var tempOffsets: [Int] = []
+            
+            for p in rawParagraphs {
+                tempParagraphs.append(p)
+                tempOffsets.append(currentIdx)
+                currentIdx += p.count + 2 // +2 for "\n\n"
+            }
+            
+            self.paragraphs = tempParagraphs
+            self.paragraphOffsets = tempOffsets
+        } else {
+            self.paragraphs = []
+            self.paragraphOffsets = []
+        }
     }
 }
 
