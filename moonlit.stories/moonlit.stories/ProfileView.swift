@@ -7,6 +7,7 @@ struct ProfileView: View {
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     @State private var isShowingCoinShop = false
+    @State private var isEditingNickname = false
 
     // Streak / stats (populated from API)
     @State private var readingHours = 0.0
@@ -59,7 +60,8 @@ struct ProfileView: View {
                                     UserHeaderView(
                                         user: meResponse?.user,
                                         profile: meResponse?.profile,
-                                        isSubscribed: isSubscribed
+                                        isSubscribed: isSubscribed,
+                                        onEdit: { isEditingNickname = true }
                                     )
                                     
                                     // Wallet Card (Coins, Gems, Passes)
@@ -91,6 +93,11 @@ struct ProfileView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $isShowingCoinShop) {
                 CoinShopView()
+            }
+            .sheet(isPresented: $isEditingNickname) {
+                EditNicknameSheet(currentNickname: meResponse?.profile?.displayName ?? "") {
+                    await loadProfileData()
+                }
             }
         }
         .task {
@@ -141,7 +148,14 @@ struct UserHeaderView: View {
     let user: User?
     let profile: UserProfile?
     let isSubscribed: Bool
-    
+    var onEdit: () -> Void = {}
+
+    // Nickname (display name) only — the underlying username is never shown.
+    private var nickname: String {
+        let name = profile?.displayName?.trimmingCharacters(in: .whitespaces) ?? ""
+        return name.isEmpty ? "Reader" : name
+    }
+
     var body: some View {
         HStack(spacing: 16) {
             // Avatar with glowing gradient borders
@@ -167,7 +181,7 @@ struct UserHeaderView: View {
                     Circle()
                         .fill(Color.mlCard)
                         .frame(width: 74, height: 74)
-                    Text(String((profile?.displayName ?? user?.username ?? "G").prefix(1)).uppercased())
+                    Text(String(nickname.prefix(1)).uppercased())
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(Color.white)
                 }
@@ -175,11 +189,20 @@ struct UserHeaderView: View {
             
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    Text(profile?.displayName ?? user?.username ?? "Guest User")
+                    Text(nickname)
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Color.white)
                         .lineLimit(1)
-                    
+
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.mlPurple)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color.mlPurple.opacity(0.15)))
+                    }
+                    .buttonStyle(.plain)
+
                     if isSubscribed {
                         Text("PREMIUM")
                             .font(.system(size: 9, weight: .black))
@@ -462,6 +485,107 @@ struct ProfileMenuRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Edit Nickname Sheet
+
+struct EditNicknameSheet: View {
+    let currentNickname: String
+    /// Called after a successful save so the caller can refresh profile data.
+    let onSaved: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var nickname: String = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String? = nil
+    @FocusState private var isFocused: Bool
+
+    private var trimmed: String {
+        nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSave: Bool {
+        !trimmed.isEmpty && trimmed != currentNickname && !isSaving
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.mlBg.ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("NICKNAME")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.mlSubtext)
+
+                    TextField("Enter a nickname", text: $nickname)
+                        .focused($isFocused)
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                        .submitLabel(.done)
+                        .onSubmit { if canSave { Task { await save() } } }
+
+                    Text("This is the name shown on your profile. Your account ID can't be changed.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.mlSubtext.opacity(0.8))
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.mlPink)
+                    }
+
+                    Spacer()
+                }
+                .padding(20)
+            }
+            .navigationTitle("Edit Nickname")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Color.mlSubtext)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isSaving {
+                        ProgressView().tint(Color.mlPurple)
+                    } else {
+                        Button("Save") { Task { await save() } }
+                            .fontWeight(.bold)
+                            .foregroundStyle(canSave ? Color.mlPurple : Color.mlSubtext)
+                            .disabled(!canSave)
+                    }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            nickname = currentNickname
+            isFocused = true
+        }
+    }
+
+    private func save() async {
+        isSaving = true
+        errorMessage = nil
+        do {
+            _ = try await NetworkService.shared.updateMe(
+                displayName: trimmed,
+                email: nil,
+                bio: nil,
+                preferences: nil
+            )
+            await onSaved()
+            dismiss()
+        } catch {
+            errorMessage = "Couldn't save nickname. Please try again."
+            isSaving = false
+        }
     }
 }
 
