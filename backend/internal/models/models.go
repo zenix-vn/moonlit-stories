@@ -74,26 +74,26 @@ type UserLoginEvent struct {
 // =========================================================================
 
 type Story struct {
-	ID                uuid.UUID  `json:"id"`
-	Title             string     `json:"title"`
-	Slug              string     `json:"slug"`
-	Description       *string    `json:"description,omitempty"`
-	Hook              *string    `json:"hook,omitempty"`
-	CoverURL          *string    `json:"cover_url,omitempty"`
-	Language          string     `json:"language"`
-	ContentRating     string     `json:"content_rating"`
-	Status            string     `json:"status"` // 'draft', 'published', etc.
-	FreeEpisodeCount  int        `json:"free_episode_count"`
-	DefaultCoinPrice  int        `json:"default_coin_price"`
-	TotalEpisodes     int        `json:"total_episodes"`
-	IsFeatured        bool       `json:"is_featured"`
-	IsHot             bool       `json:"is_hot"`
-	IsEditorPick      bool       `json:"is_editor_pick"`
-	PublishedAt       *time.Time `json:"published_at,omitempty"`
-	CreatedBy         *uuid.UUID `json:"created_by,omitempty"`
-	UpdatedBy         *uuid.UUID `json:"updated_by,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID               uuid.UUID  `json:"id"`
+	Title            string     `json:"title"`
+	Slug             string     `json:"slug"`
+	Description      *string    `json:"description,omitempty"`
+	Hook             *string    `json:"hook,omitempty"`
+	CoverURL         *string    `json:"cover_url,omitempty"`
+	Language         string     `json:"language"`
+	ContentRating    string     `json:"content_rating"`
+	Status           string     `json:"status"` // 'draft', 'published', etc.
+	FreeEpisodeCount int        `json:"free_episode_count"`
+	DefaultCoinPrice int        `json:"default_coin_price"`
+	TotalEpisodes    int        `json:"total_episodes"`
+	IsFeatured       bool       `json:"is_featured"`
+	IsHot            bool       `json:"is_hot"`
+	IsEditorPick     bool       `json:"is_editor_pick"`
+	PublishedAt      *time.Time `json:"published_at,omitempty"`
+	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
+	UpdatedBy        *uuid.UUID `json:"updated_by,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 
 	// Joined details for API representations
 	Genres []string `json:"genres,omitempty"`
@@ -113,27 +113,43 @@ type Season struct {
 }
 
 type Episode struct {
-	ID                    uuid.UUID       `json:"id"`
-	StoryID               uuid.UUID       `json:"story_id"`
-	SeasonID              *uuid.UUID      `json:"season_id,omitempty"`
-	EpisodeNumber         int             `json:"episode_number"`
-	Title                 string          `json:"title"`
-	Slug                  *string         `json:"slug,omitempty"`
-	ContentJSON           json.RawMessage `json:"content_json,omitempty"`
-	ContentHTML           *string         `json:"content_html,omitempty"`
-	ContentText           *string         `json:"content_text,omitempty"`
-	WordCount             int             `json:"word_count"`
-	EstimatedReadingTime  int             `json:"estimated_reading_time"` // in seconds
-	IsFree                bool            `json:"is_free"`
-	CoinPrice             *int            `json:"coin_price,omitempty"`
-	PreviewText           *string         `json:"preview_text,omitempty"`
-	AudioURL              *string         `json:"audio_url,omitempty"`
-	Status                string          `json:"status"`
-	PublishedAt           *time.Time      `json:"published_at,omitempty"`
-	CreatedBy             *uuid.UUID      `json:"created_by,omitempty"`
-	UpdatedBy             *uuid.UUID      `json:"updated_by,omitempty"`
-	CreatedAt             time.Time       `json:"created_at"`
-	UpdatedAt             time.Time       `json:"updated_at"`
+	ID                   uuid.UUID       `json:"id"`
+	StoryID              uuid.UUID       `json:"story_id"`
+	SeasonID             *uuid.UUID      `json:"season_id,omitempty"`
+	EpisodeNumber        int             `json:"episode_number"`
+	Title                string          `json:"title"`
+	Slug                 *string         `json:"slug,omitempty"`
+	ContentJSON          json.RawMessage `json:"content_json,omitempty"`
+	ContentHTML          *string         `json:"content_html,omitempty"`
+	ContentText          *string         `json:"content_text,omitempty"`
+	WordCount            int             `json:"word_count"`
+	EstimatedReadingTime int             `json:"estimated_reading_time"` // in seconds
+	IsFree               bool            `json:"is_free"`
+	CoinPrice            *int            `json:"coin_price,omitempty"`
+	PreviewText          *string         `json:"preview_text,omitempty"`
+	AudioURL             *string         `json:"audio_url,omitempty"`
+	AudioVoice1Name      string          `json:"audio_voice_1_name"`
+	AudioURL1            *string         `json:"audio_url_1,omitempty"`
+	AudioVoice2Name      string          `json:"audio_voice_2_name"`
+	AudioURL2            *string         `json:"audio_url_2,omitempty"`
+	AudioVoice3Name      string          `json:"audio_voice_3_name"`
+	AudioURL3            *string         `json:"audio_url_3,omitempty"`
+	AudioOptions         []AudioOption   `json:"audio_options,omitempty"`
+	Status               string          `json:"status"`
+	PublishedAt          *time.Time      `json:"published_at,omitempty"`
+	CreatedBy            *uuid.UUID      `json:"created_by,omitempty"`
+	UpdatedBy            *uuid.UUID      `json:"updated_by,omitempty"`
+	CreatedAt            time.Time       `json:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+}
+
+type AudioOption struct {
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	Source     string  `json:"source"` // 'tts' or 'url'
+	URL        *string `json:"url,omitempty"`
+	IsDefault  bool    `json:"is_default"`
+	AccessTier string  `json:"access_tier"` // reserved for subscription, coin, or free voice gating
 }
 
 type Genre struct {
@@ -275,25 +291,25 @@ type DailyCheckin struct {
 }
 
 type UserStreak struct {
-	UserID         uuid.UUID  `json:"user_id"`
-	CurrentStreak  int        `json:"current_streak"`
-	LongestStreak  int        `json:"longest_streak"`
-	LastActiveDate *string    `json:"last_active_date,omitempty"` // YYYY-MM-DD
-	UpdatedAt      time.Time  `json:"updated_at"`
+	UserID         uuid.UUID `json:"user_id"`
+	CurrentStreak  int       `json:"current_streak"`
+	LongestStreak  int       `json:"longest_streak"`
+	LastActiveDate *string   `json:"last_active_date,omitempty"` // YYYY-MM-DD
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type Task struct {
-	ID          uuid.UUID `json:"id"`
-	Code        string    `json:"code"`
-	Title       string    `json:"title"`
-	Description *string   `json:"description,omitempty"`
-	Type        string    `json:"type"`
-	TargetEvent string    `json:"target_event"`
-	TargetValue int       `json:"target_value"`
-	RewardType  string    `json:"reward_type"`
+	ID           uuid.UUID `json:"id"`
+	Code         string    `json:"code"`
+	Title        string    `json:"title"`
+	Description  *string   `json:"description,omitempty"`
+	Type         string    `json:"type"`
+	TargetEvent  string    `json:"target_event"`
+	TargetValue  int       `json:"target_value"`
+	RewardType   string    `json:"reward_type"`
 	RewardAmount int       `json:"reward_amount"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
+	Active       bool      `json:"active"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type UserTaskProgress struct {
@@ -358,11 +374,11 @@ type Subscription struct {
 }
 
 type SubscriptionEntitlement struct {
-	ID             uuid.UUID       `json:"id"`
-	SubscriptionID uuid.UUID       `json:"subscription_id"`
+	ID              uuid.UUID       `json:"id"`
+	SubscriptionID  uuid.UUID       `json:"subscription_id"`
 	EntitlementCode string          `json:"entitlement_code"`
-	EntitlementVal json.RawMessage `json:"entitlement_value,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
+	EntitlementVal  json.RawMessage `json:"entitlement_value,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 // =========================================================================
@@ -434,14 +450,14 @@ type AnalyticsEvent struct {
 // =========================================================================
 
 type AdminUser struct {
-	ID           uuid.UUID  `json:"id"`
-	Email        string     `json:"email"`
-	Name         *string    `json:"name,omitempty"`
-	PasswordHash string     `json:"-"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	Roles        []string   `json:"roles,omitempty"`
+	ID           uuid.UUID `json:"id"`
+	Email        string    `json:"email"`
+	Name         *string   `json:"name,omitempty"`
+	PasswordHash string    `json:"-"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Roles        []string  `json:"roles,omitempty"`
 }
 
 type AdminRole struct {

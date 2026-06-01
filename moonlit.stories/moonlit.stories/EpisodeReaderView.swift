@@ -48,20 +48,27 @@ class EpisodeReaderViewModel {
         return success
     }
 
-    func unlockWithAd(id: String) async {
+    func unlockWithAd(id: String) {
         guard !isLoading else { return }
-        isLoading = true
         errorMessage = nil
-        do {
-            let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: id)
-            if res.status == "unlocked" || res.status == "already_unlocked" {
-                NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-                episode = try await NetworkService.shared.fetchEpisodeDetail(episodeId: id)
+        AdManager.shared.requestAd(
+            onReward: {
+                self.isLoading = true
+                do {
+                    let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: id)
+                    if res.status == "unlocked" || res.status == "already_unlocked" {
+                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                        self.episode = try await NetworkService.shared.fetchEpisodeDetail(episodeId: id)
+                    }
+                } catch {
+                    self.errorMessage = error.localizedDescription
+                }
+                self.isLoading = false
+            },
+            onFail: { msg in
+                self.errorMessage = msg
             }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoading = false
+        )
     }
 }
 
@@ -98,6 +105,7 @@ struct EpisodeReaderView: View {
     @State private var showingShopSheet = false
     @State private var paragraphs: [String] = []
     @State private var paragraphOffsets: [Int] = []
+    @State private var selectedAudioOptionID: String = "tts_reader_1"
 
     // Floating audio bubble
     @State private var bubblePos: CGPoint = .zero          // set on appear
@@ -117,6 +125,45 @@ struct EpisodeReaderView: View {
     }
     private var activeEpisodeId: String {
         selectedNewEpisodeId ?? episodeId
+    }
+    private var effectiveAudioOptions: [AudioOption] {
+        guard let ep = viewModel.episode else { return [] }
+
+        var raw: [AudioOption]
+        if !ep.audioOptions.isEmpty {
+            raw = ep.audioOptions
+        } else {
+            raw = [
+                AudioOption(
+                    id: "tts_reader_1",
+                    name: "Device Voice",
+                    source: "tts",
+                    url: nil,
+                    isDefault: true,
+                    accessTier: "free"
+                )
+            ]
+            if let audioUrl = ep.audioUrl, !audioUrl.isEmpty {
+                raw.append(AudioOption(
+                    id: "audio_reader_1",
+                    name: "Reader 1",
+                    source: "url",
+                    url: audioUrl,
+                    isDefault: false,
+                    accessTier: "premium"
+                ))
+            }
+        }
+
+        // Keep only the first TTS option — multiple device voices are identical
+        var seenTTS = false
+        return raw.filter { opt in
+            if opt.source == "tts" {
+                if seenTTS { return false }
+                seenTTS = true
+            }
+            return true
+        }
     }
     private var activeParagraphIndex: Int {
         guard !paragraphs.isEmpty else { return 0 }
@@ -271,19 +318,7 @@ struct EpisodeReaderView: View {
             if newHasAccess == true, oldHasAccess != true {
                 if let ep = viewModel.episode {
                     parseParagraphs(from: ep)
-                    if let url = ep.audioUrl, !url.isEmpty {
-                        audioPlayer.load(
-                            urlString: url,
-                            episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
-                            storyTitle: story.title
-                        )
-                    } else if let content = ep.contentText, !content.isEmpty {
-                        audioPlayer.loadTTS(
-                            text: cleanHTMLTags(content),
-                            episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
-                            storyTitle: story.title
-                        )
-                    }
+                    loadSelectedAudio(for: ep, preserveSelection: false)
                 }
             }
         }
@@ -298,6 +333,12 @@ struct EpisodeReaderView: View {
             NavigationStack {
                 CoinShopView()
             }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { AdManager.shared.isShowingDevAd },
+            set: { if !$0 { AdManager.shared.cancelDevAd() } }
+        )) {
+            DevAdView()
         }
         .toolbar(.hidden, for: .tabBar)
         .toolbar(.hidden, for: .navigationBar)
@@ -352,6 +393,8 @@ struct EpisodeReaderView: View {
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color.mlPurple)
 
+            voiceSwitcherButton
+
             Button(action: { withAnimation { showSettings.toggle() } }) {
                 ZStack {
                     Circle()
@@ -370,6 +413,49 @@ struct EpisodeReaderView: View {
             Rectangle()
                 .fill(settings.isDarkMode ? .ultraThinMaterial : .regularMaterial)
                 .environment(\.colorScheme, settings.isDarkMode ? .dark : .light)
+        }
+    }
+
+    private var voiceSwitcherButton: some View {
+        Group {
+            if effectiveAudioOptions.count > 1 {
+                Menu {
+                    ForEach(effectiveAudioOptions) { option in
+                        Button {
+                            selectedAudioOptionID = option.id
+                            if let ep = viewModel.episode {
+                                loadSelectedAudio(for: ep)
+                            }
+                        } label: {
+                            Label(
+                                "\(option.name) · \(audioOptionSubtitle(option))",
+                                systemImage: selectedAudioOptionID == option.id ? "checkmark" : ""
+                            )
+                        }
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.mlPurple.opacity(settings.isDarkMode ? 0.32 : 0.18),
+                                        Color.mlPink.opacity(settings.isDarkMode ? 0.22 : 0.14)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 36, height: 36)
+                        Circle()
+                            .strokeBorder(Color.mlPurple.opacity(0.32), lineWidth: 0.8)
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "person.wave.2.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.mlPurple)
+                    }
+                }
+            }
         }
     }
 
@@ -553,9 +639,7 @@ struct EpisodeReaderView: View {
                 }
 
                 Button(action: {
-                    Task {
-                        await viewModel.unlockWithAd(id: ep.id)
-                    }
+                    viewModel.unlockWithAd(id: ep.id)
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "play.rectangle.fill")
@@ -752,7 +836,7 @@ struct EpisodeReaderView: View {
     // MARK: - Floating Audio Bubble
 
     private let bubbleD: CGFloat = 62      // collapsed diameter
-    private let bubbleExpandW: CGFloat = 258  // expanded width
+    private let bubbleExpandW: CGFloat = 314  // expanded width
 
     private func effectiveBubblePos(in size: CGSize) -> CGPoint {
         let hw = (bubbleExpanded ? bubbleExpandW : bubbleD) / 2 + 8
@@ -856,6 +940,31 @@ struct EpisodeReaderView: View {
                         .foregroundStyle(.white.opacity(0.7))
                         .frame(width: 44)
 
+                    // Voice menu — only shown when multiple audio options are available
+                    if effectiveAudioOptions.count > 1 {
+                        Menu {
+                            ForEach(effectiveAudioOptions) { option in
+                                Button {
+                                    selectedAudioOptionID = option.id
+                                    if let ep = viewModel.episode {
+                                        loadSelectedAudio(for: ep)
+                                    }
+                                } label: {
+                                    Label(
+                                        "\(option.name) · \(audioOptionSubtitle(option))",
+                                        systemImage: selectedAudioOptionID == option.id ? "checkmark" : ""
+                                    )
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "person.wave.2.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .frame(width: 30, height: 30)
+                                .background(Circle().fill(.white.opacity(0.14)))
+                        }
+                    }
+
                     // Speed menu
                     Menu {
                         ForEach(AudioPlayerManager.rateOptions, id: \.self) { rate in
@@ -927,6 +1036,36 @@ struct EpisodeReaderView: View {
         rate == 1.0 ? "1x" : String(format: "%.4g", rate) + "x"
     }
 
+    private func audioOptionSubtitle(_ option: AudioOption) -> String {
+        if option.source == "tts" {
+            return "Free device voice"
+        }
+        return option.accessTier == "premium" ? "Premium audio" : "Audio file"
+    }
+
+    private func loadSelectedAudio(for ep: EpisodeDetail, preserveSelection: Bool = true) {
+        let options = effectiveAudioOptions
+        if !preserveSelection || !options.contains(where: { $0.id == selectedAudioOptionID }) {
+            selectedAudioOptionID = options.first(where: { $0.isDefault })?.id ?? options.first?.id ?? "tts_reader_1"
+        }
+
+        let selected = options.first(where: { $0.id == selectedAudioOptionID })
+        if selected?.source == "url", let url = selected?.url, !url.isEmpty {
+            audioPlayer.load(
+                urlString: url,
+                episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
+                storyTitle: story.title
+            )
+        } else if let content = ep.contentText, !content.isEmpty {
+            audioPlayer.loadTTS(
+                text: cleanHTMLTags(content),
+                episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
+                storyTitle: story.title,
+                voiceOptionID: selected?.id ?? "tts_reader_1"
+            )
+        }
+    }
+
     private func loadAndSyncEpisode(id: String) async {
         await finalizeReadingSession()
         audioPlayer.stop()
@@ -957,19 +1096,7 @@ struct EpisodeReaderView: View {
         }
         
         if let ep = viewModel.episode {
-            if let url = ep.audioUrl, !url.isEmpty {
-                audioPlayer.load(
-                    urlString: url,
-                    episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
-                    storyTitle: story.title
-                )
-            } else if let content = ep.contentText, !content.isEmpty {
-                audioPlayer.loadTTS(
-                    text: cleanHTMLTags(content),
-                    episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
-                    storyTitle: story.title
-                )
-            }
+            loadSelectedAudio(for: ep, preserveSelection: false)
         }
     }
 

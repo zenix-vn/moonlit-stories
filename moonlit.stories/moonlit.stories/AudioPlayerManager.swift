@@ -24,6 +24,7 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
     private var ttsText: String = ""
     private var synthesizer: AVSpeechSynthesizer?
     private var ttsUtterance: AVSpeechUtterance?
+    private var ttsVoiceOptionID: String = "tts_reader_1"
     var currentCharacterIndex: Int = 0
     private var ttsOffset: Int = 0
 
@@ -94,10 +95,11 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: - Load TTS Playback
 
-    func loadTTS(text: String, episodeTitle: String = "", storyTitle: String = "") {
+    func loadTTS(text: String, episodeTitle: String = "", storyTitle: String = "", voiceOptionID: String = "tts_reader_1") {
         stop()
         isTTS = true
         ttsText = text
+        ttsVoiceOptionID = voiceOptionID
         nowPlayingTitle = episodeTitle
         nowPlayingArtist = storyTitle
         currentCharacterIndex = 0
@@ -121,6 +123,10 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
         }
         synthesizer?.stopSpeaking(at: .immediate)
 
+        if currentCharacterIndex >= ttsText.count {
+            currentCharacterIndex = 0
+        }
+
         let textToSpeak: String
         if currentCharacterIndex < ttsText.count {
             let start = ttsText.index(ttsText.startIndex, offsetBy: currentCharacterIndex)
@@ -132,17 +138,26 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
             currentCharacterIndex = 0
         }
 
-        let utterance = AVSpeechUtterance(string: textToSpeak)
-        // AVSpeechUtteranceDefaultSpeechRate is 0.5. Scale it up/down.
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * playbackRate
-
         let lang = detectLanguage(of: ttsText)
+
+        let utterance = AVSpeechUtterance(string: textToSpeak)
         utterance.voice = AVSpeechSynthesisVoice(language: lang)
+        utterance.rate = normalTTSRate()
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        utterance.prefersAssistiveTechnologySettings = false
+        utterance.preUtteranceDelay = 0
+        utterance.postUtteranceDelay = 0
 
         ttsUtterance = utterance
         isPlaying = true
         synthesizer?.speak(utterance)
         updateNowPlayingInfo()
+    }
+
+    private func normalTTSRate() -> Float {
+        let base = AVSpeechUtteranceDefaultSpeechRate * playbackRate
+        return min(max(base, AVSpeechUtteranceMinimumSpeechRate), AVSpeechUtteranceMaximumSpeechRate)
     }
 
     private func detectLanguage(of text: String) -> String {
@@ -258,6 +273,7 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
             ttsUtterance = nil
             isTTS = false
             ttsText = ""
+            ttsVoiceOptionID = "tts_reader_1"
             ttsOffset = 0
             currentCharacterIndex = 0
         }

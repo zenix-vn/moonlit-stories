@@ -17,53 +17,30 @@ extension Color {
 struct HomeView: View {
     @State private var tab = 0
     @StateObject private var viewModel = HomeViewModel()
-    @State private var isShowingReader = false
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            TabView(selection: $tab) {
-                MainHomeTab(selectedTab: $tab, viewModel: viewModel)
-                    .tabItem { Label("Home",    systemImage: "house.fill") }
-                    .tag(0)
-                SearchTabView()
-                    .tabItem { Label("Search",  systemImage: "magnifyingglass") }
-                    .tag(1)
-                LibraryTabView()
-                    .tabItem { Label("Library", systemImage: "books.vertical.fill") }
-                    .tag(2)
-                ProfileView()
-                    .tabItem { Label("Profile", systemImage: "person.fill") }
-                    .tag(3)
-            }
-            .tint(Color.mlPurple)
-            .preferredColorScheme(.dark)
-            .task {
-                // Pre-warm keyboard service so first tap on Search is instant.
-                // becomeFirstResponder + immediate resignFirstResponder boots the keyboard
-                // process without showing any animation.
-                try? await Task.sleep(for: .seconds(1.5))
-                await MainActor.run { prewarmKeyboard() }
-            }
-
-            if let recentItem = viewModel.continueReading.first {
-                BottomContinueReadingBar(item: recentItem) {
-                    isShowingReader = true
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 58) // Sits above bottom TabBar
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.continueReading.first?.storyId)
-            }
+        TabView(selection: $tab) {
+            MainHomeTab(selectedTab: $tab, viewModel: viewModel)
+                .tabItem { Label("Home",    systemImage: "house.fill") }
+                .tag(0)
+            SearchTabView()
+                .tabItem { Label("Search",  systemImage: "magnifyingglass") }
+                .tag(1)
+            LibraryTabView()
+                .tabItem { Label("Library", systemImage: "books.vertical.fill") }
+                .tag(2)
+            ProfileView()
+                .tabItem { Label("Profile", systemImage: "person.fill") }
+                .tag(3)
         }
-        .sheet(isPresented: $isShowingReader, onDismiss: {
-            NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-        }) {
-            if let recentItem = viewModel.continueReading.first {
-                NavigationStack {
-                    ContinueReadingDestinationView(item: recentItem)
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-            }
+        .tint(Color.mlPurple)
+        .preferredColorScheme(.dark)
+        .task {
+            // Pre-warm keyboard service so first tap on Search is instant.
+            // becomeFirstResponder + immediate resignFirstResponder boots the keyboard
+            // process without showing any animation.
+            try? await Task.sleep(for: .seconds(1.5))
+            await MainActor.run { prewarmKeyboard() }
         }
     }
 
@@ -86,6 +63,7 @@ struct MainHomeTab: View {
     @Binding var selectedTab: Int
     @ObservedObject var viewModel: HomeViewModel
     @State private var selectedGenreFilter: String? = nil
+    @State private var isShowingReader = false
 
     private func filteredStories(_ stories: [Story]) -> [Story] {
         guard let selected = selectedGenreFilter?.trimmingCharacters(in: .whitespacesAndNewlines), !selected.isEmpty else {
@@ -244,8 +222,29 @@ struct MainHomeTab: View {
             TopNav(wallet: viewModel.wallet, onProfileTap: {
                 selectedTab = 3
             })
+
+            if let recentItem = viewModel.continueReading.first {
+                BottomContinueReadingBar(item: recentItem) {
+                    isShowingReader = true
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.continueReading.first?.storyId)
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $isShowingReader, onDismiss: {
+            NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+        }) {
+            if let recentItem = viewModel.continueReading.first {
+                NavigationStack {
+                    ContinueReadingDestinationView(item: recentItem)
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
         } // NavigationStack
     }
 }

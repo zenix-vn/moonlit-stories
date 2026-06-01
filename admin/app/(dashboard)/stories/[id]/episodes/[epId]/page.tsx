@@ -2,22 +2,32 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { api } from "../../../../../lib/api";
-import { BookOpen, ArrowLeft, Save, Loader2, CheckCircle, EyeOff } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Headphones, UploadCloud } from "lucide-react";
+
+type AudioVoiceForm = {
+  name: string;
+  url: string;
+};
+
+const defaultAudioVoices: AudioVoiceForm[] = [
+  { name: "Reader 1", url: "" },
+  { name: "Reader 2", url: "" },
+  { name: "Reader 3", url: "" },
+];
 
 export default function EpisodeEditorPage({
   params,
 }: {
   params: Promise<{ id: string; epId: string }>;
 }) {
-  const router = useRouter();
   const { id, epId } = use(params);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [uploadingAudioIndex, setUploadingAudioIndex] = useState<number | null>(null);
 
   // Form State
   const [title, setTitle] = useState("");
@@ -28,7 +38,7 @@ export default function EpisodeEditorPage({
   const [status, setStatus] = useState("draft");
   const [contentText, setContentText] = useState("");
   const [previewText, setPreviewText] = useState("");
-  const [audioUrl, setAudioUrl] = useState("");
+  const [audioVoices, setAudioVoices] = useState<AudioVoiceForm[]>(defaultAudioVoices);
 
   useEffect(() => {
     api.getEpisode(epId)
@@ -41,7 +51,11 @@ export default function EpisodeEditorPage({
         setStatus(data.status);
         setContentText(data.content_text || "");
         setPreviewText(data.preview_text || "");
-        setAudioUrl(data.audio_url || "");
+        setAudioVoices([
+          { name: data.audio_voice_1_name || "Reader 1", url: data.audio_url_1 || data.audio_url || "" },
+          { name: data.audio_voice_2_name || "Reader 2", url: data.audio_url_2 || "" },
+          { name: data.audio_voice_3_name || "Reader 3", url: data.audio_url_3 || "" },
+        ]);
         setLoading(false);
       })
       .catch((err) => {
@@ -65,13 +79,19 @@ export default function EpisodeEditorPage({
         coin_price: isFree ? 0 : Number(coinPrice),
         content_text: contentText,
         preview_text: previewText || contentText.slice(0, 300) + "...",
-        audio_url: audioUrl || null,
+        audio_url: audioVoices[0]?.url || null,
+        audio_voice_1_name: audioVoices[0]?.name || "Reader 1",
+        audio_url_1: audioVoices[0]?.url || null,
+        audio_voice_2_name: audioVoices[1]?.name || "Reader 2",
+        audio_url_2: audioVoices[1]?.url || null,
+        audio_voice_3_name: audioVoices[2]?.name || "Reader 3",
+        audio_url_3: audioVoices[2]?.url || null,
         status,
       });
 
       setSuccess("Episode updated successfully!");
-    } catch (err: any) {
-      setError(err.message || "Failed to save episode content");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save episode content");
     } finally {
       setSaving(false);
     }
@@ -86,6 +106,29 @@ export default function EpisodeEditorPage({
     // 200 words per minute average
     const minutes = Math.ceil(getWordCount() / 200);
     return minutes;
+  };
+
+  const updateAudioVoice = (index: number, patch: Partial<AudioVoiceForm>) => {
+    setAudioVoices((current) => current.map((voice, i) => (
+      i === index ? { ...voice, ...patch } : voice
+    )));
+  };
+
+  const handleAudioUpload = async (index: number, file: File | null) => {
+    if (!file) return;
+    setUploadingAudioIndex(index);
+    setError("");
+    setSuccess("");
+
+    try {
+      const uploaded = await api.uploadAudio(file);
+      updateAudioVoice(index, { url: uploaded.url });
+      setSuccess(`Audio uploaded for Voice ${index + 1}. Save content to apply it to this episode.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upload audio");
+    } finally {
+      setUploadingAudioIndex(null);
+    }
   };
 
   if (loading) {
@@ -253,20 +296,60 @@ export default function EpisodeEditorPage({
             </div>
 
             <div className="pt-2 border-t border-[#2d334a]/30">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
-                🎧 Audio Narration URL
-              </label>
-              <input
-                type="url"
-                value={audioUrl}
-                onChange={(e) => setAudioUrl(e.target.value)}
-                placeholder="https://cdn.example.com/audio/ep1.mp3"
-                className="block w-full rounded-lg border border-[#2d334a] bg-[#171b31] py-2 px-3 text-white text-xs placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none"
-              />
-              {audioUrl && (
-                <audio controls src={audioUrl} className="mt-2 w-full h-8 opacity-80" />
-              )}
-              <p className="mt-1 text-[10px] text-[#94a3b8]">Direct link to .mp3 / .m4a audio file. Leave blank if no audio narration.</p>
+              <div className="mb-3 flex items-center gap-2">
+                <Headphones className="h-4 w-4 text-[#8b5cf6]" />
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">
+                  Audio Narration Voices
+                </label>
+              </div>
+
+              <div className="space-y-4">
+                {audioVoices.map((voice, index) => (
+                  <div key={index} className="rounded-lg border border-[#2d334a]/70 bg-[#171b31]/70 p-3">
+                    <div className="mb-2 grid grid-cols-[88px_1fr] gap-2">
+                      <span className="py-2 text-xs font-semibold text-[#94a3b8]">Voice {index + 1}</span>
+                      <input
+                        type="text"
+                        value={voice.name}
+                        onChange={(e) => updateAudioVoice(index, { name: e.target.value })}
+                        placeholder={`Reader ${index + 1}`}
+                        className="block w-full rounded-lg border border-[#2d334a] bg-[#101426] py-2 px-3 text-white text-xs placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none"
+                      />
+                    </div>
+                    <input
+                      type="url"
+                      value={voice.url}
+                      onChange={(e) => updateAudioVoice(index, { url: e.target.value })}
+                      placeholder={`https://cdn.example.com/audio/ep${epNum}-voice-${index + 1}.mp3`}
+                      className="block w-full rounded-lg border border-[#2d334a] bg-[#101426] py-2 px-3 text-white text-xs placeholder-slate-500 focus:border-[#8b5cf6] focus:outline-none"
+                    />
+                    <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#8b5cf6]/40 bg-[#8b5cf6]/10 px-3 py-2 text-xs font-semibold text-[#c4b5fd] transition-colors hover:bg-[#8b5cf6]/20">
+                      {uploadingAudioIndex === index ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UploadCloud className="h-3.5 w-3.5" />
+                      )}
+                      {uploadingAudioIndex === index ? "Uploading audio..." : "Upload audio file"}
+                      <input
+                        type="file"
+                        accept="audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,audio/webm,.mp3,.m4a,.aac,.wav,.ogg,.opus,.webm,.mp4"
+                        className="sr-only"
+                        disabled={uploadingAudioIndex !== null}
+                        onChange={(e) => {
+                          void handleAudioUpload(index, e.target.files?.[0] ?? null);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    {voice.url && (
+                      <audio controls src={voice.url} className="mt-2 h-8 w-full opacity-80" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-[#94a3b8]">
+                Voice 1 is also used as the app&apos;s default text-to-speech reader name. URL 1 remains compatible with the legacy audio_url field.
+              </p>
             </div>
 
             <button

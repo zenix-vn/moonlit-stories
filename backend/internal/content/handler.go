@@ -4,8 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +20,22 @@ import (
 )
 
 type ContentHandler struct {
-	DB *sql.DB
+	DB            *sql.DB
+	UploadDir     string
+	PublicBaseURL string
+}
+
+const maxAudioUploadBytes int64 = 100 * 1024 * 1024
+
+var allowedAudioExtensions = map[string]string{
+	".aac":  "audio/aac",
+	".m4a":  "audio/mp4",
+	".mp3":  "audio/mpeg",
+	".mp4":  "audio/mp4",
+	".ogg":  "audio/ogg",
+	".opus": "audio/ogg",
+	".wav":  "audio/wav",
+	".webm": "audio/webm",
 }
 
 func (h *ContentHandler) hydrateStoryTaxonomy(ctx context.Context, s *models.Story) {
@@ -68,6 +88,80 @@ func (h *ContentHandler) hydrateStoriesTaxonomy(ctx context.Context, stories []m
 	}
 }
 
+func normalizeAudioVoiceName(name, fallback string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
+}
+
+func normalizeOptionalURL(url *string) *string {
+	if url == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*url)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func normalizeEpisodeAudio(ep *models.Episode) {
+	ep.AudioVoice1Name = normalizeAudioVoiceName(ep.AudioVoice1Name, "Reader 1")
+	ep.AudioVoice2Name = normalizeAudioVoiceName(ep.AudioVoice2Name, "Reader 2")
+	ep.AudioVoice3Name = normalizeAudioVoiceName(ep.AudioVoice3Name, "Reader 3")
+
+	ep.AudioURL = normalizeOptionalURL(ep.AudioURL)
+	ep.AudioURL1 = normalizeOptionalURL(ep.AudioURL1)
+	ep.AudioURL2 = normalizeOptionalURL(ep.AudioURL2)
+	ep.AudioURL3 = normalizeOptionalURL(ep.AudioURL3)
+
+	if ep.AudioURL1 == nil {
+		ep.AudioURL1 = ep.AudioURL
+	}
+	ep.AudioURL = ep.AudioURL1
+}
+
+func buildEpisodeAudioOptions(ep models.Episode) []models.AudioOption {
+	options := []models.AudioOption{
+		{
+			ID:         "tts_reader_1",
+			Name:       ep.AudioVoice1Name,
+			Source:     "tts",
+			IsDefault:  true,
+			AccessTier: "free",
+		},
+	}
+
+	urlOptions := []struct {
+		id   string
+		name string
+		url  *string
+	}{
+		{id: "audio_reader_1", name: ep.AudioVoice1Name, url: ep.AudioURL1},
+		{id: "audio_reader_2", name: ep.AudioVoice2Name, url: ep.AudioURL2},
+		{id: "audio_reader_3", name: ep.AudioVoice3Name, url: ep.AudioURL3},
+	}
+
+	for _, opt := range urlOptions {
+		if opt.url == nil || strings.TrimSpace(*opt.url) == "" {
+			continue
+		}
+		url := strings.TrimSpace(*opt.url)
+		options = append(options, models.AudioOption{
+			ID:         opt.id,
+			Name:       opt.name,
+			Source:     "url",
+			URL:        &url,
+			IsDefault:  false,
+			AccessTier: "premium",
+		})
+	}
+
+	return options
+}
+
 // =========================================================================
 // PUBLIC MOBILE ENDPOINTS
 // =========================================================================
@@ -116,15 +210,15 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 
 	// 4. Continue Reading List (join with stories and episodes)
 	type ContinueReading struct {
-		StoryID            uuid.UUID `json:"story_id"`
-		StoryTitle         string    `json:"story_title"`
-		StorySlug          string    `json:"story_slug"`
-		CoverURL           string    `json:"cover_url"`
-		EpisodeID          uuid.UUID `json:"episode_id"`
-		EpisodeTitle       string    `json:"episode_title"`
-		EpisodeNumber      int       `json:"episode_number"`
-		ProgressPercent    float64   `json:"progress_percent"`
-		LastReadAt         time.Time `json:"last_read_at"`
+		StoryID         uuid.UUID `json:"story_id"`
+		StoryTitle      string    `json:"story_title"`
+		StorySlug       string    `json:"story_slug"`
+		CoverURL        string    `json:"cover_url"`
+		EpisodeID       uuid.UUID `json:"episode_id"`
+		EpisodeTitle    string    `json:"episode_title"`
+		EpisodeNumber   int       `json:"episode_number"`
+		ProgressPercent float64   `json:"progress_percent"`
+		LastReadAt      time.Time `json:"last_read_at"`
 	}
 	continueList := []ContinueReading{}
 	rows, err := h.DB.QueryContext(ctx, `
@@ -215,10 +309,10 @@ func (h *ContentHandler) GetHomeFeed(c echo.Context) error {
 
 	// 8. Home hero card config from system_config
 	heroCard := map[string]interface{}{
-		"metric":       "1000+",
-		"title":        "Werewolf Novels",
-		"subtitle":     "Romance stories · Love episodes",
-		"cta_text":     "Start Reading",
+		"metric":        "1000+",
+		"title":         "Werewolf Novels",
+		"subtitle":      "Romance stories · Love episodes",
+		"cta_text":      "Start Reading",
 		"cta_deep_link": "",
 	}
 
@@ -499,15 +593,15 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 
 	var ep models.Episode
 	var contentJSON []byte
-	var contentHTML, contentText, previewText, audioURL, slug *string
+	var contentHTML, contentText, previewText, audioURL, audioURL1, audioURL2, audioURL3, slug *string
 	var seasonID *uuid.UUID
 
 	err = h.DB.QueryRowContext(ctx, `
-		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, status, published_at, created_at, updated_at
+		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, audio_voice_1_name, audio_url_1, audio_voice_2_name, audio_url_2, audio_voice_3_name, audio_url_3, status, published_at, created_at, updated_at
 		FROM episodes WHERE id = $1 AND status = 'published'
 	`, episodeID).Scan(
 		&ep.ID, &ep.StoryID, &seasonID, &ep.EpisodeNumber, &ep.Title, &slug, &contentJSON, &contentHTML, &contentText,
-		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &audioURL, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
+		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &audioURL, &ep.AudioVoice1Name, &audioURL1, &ep.AudioVoice2Name, &audioURL2, &ep.AudioVoice3Name, &audioURL3, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
 	)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "episode not found"})
@@ -517,6 +611,10 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 	ep.SeasonID = seasonID
 	ep.PreviewText = previewText
 	ep.AudioURL = audioURL
+	ep.AudioURL1 = audioURL1
+	ep.AudioURL2 = audioURL2
+	ep.AudioURL3 = audioURL3
+	normalizeEpisodeAudio(&ep)
 
 	if !hasAccess {
 		// Hide full content, only return preview text (first paragraph)
@@ -525,6 +623,10 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 		ep.ContentHTML = nil
 		ep.ContentText = previewText
 		ep.AudioURL = nil
+		ep.AudioURL1 = nil
+		ep.AudioURL2 = nil
+		ep.AudioURL3 = nil
+		ep.AudioOptions = nil
 		return c.JSON(http.StatusForbidden, map[string]interface{}{
 			"error":      "episode is locked",
 			"has_access": false,
@@ -538,6 +640,7 @@ func (h *ContentHandler) GetEpisodeDetail(c echo.Context) error {
 	ep.ContentJSON = contentJSON
 	ep.ContentHTML = contentHTML
 	ep.ContentText = contentText
+	ep.AudioOptions = buildEpisodeAudioOptions(ep)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"has_access": true,
@@ -763,6 +866,7 @@ func (h *ContentHandler) AdminCreateEpisode(c echo.Context) error {
 	ctx := c.Request().Context()
 	ep.ID = uuid.New()
 	ep.StoryID = storyID
+	normalizeEpisodeAudio(&ep)
 
 	// Estimate reading time: 200 words per minute average (12 seconds per 40 words)
 	wordCount := len(getString(ep.ContentText)) / 5 // raw approximation
@@ -773,9 +877,9 @@ func (h *ContentHandler) AdminCreateEpisode(c echo.Context) error {
 
 	// Insert
 	_, err = h.DB.ExecContext(ctx, `
-		INSERT INTO episodes (id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, status, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'draft', $16, $16)
-	`, ep.ID, storyID, ep.SeasonID, ep.EpisodeNumber, ep.Title, ep.Slug, ep.ContentJSON, ep.ContentHTML, ep.ContentText, wordCount, estReadingTime, ep.IsFree, ep.CoinPrice, ep.PreviewText, ep.AudioURL, adminID)
+		INSERT INTO episodes (id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, audio_voice_1_name, audio_url_1, audio_voice_2_name, audio_url_2, audio_voice_3_name, audio_url_3, status, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'draft', $22, $22)
+	`, ep.ID, storyID, ep.SeasonID, ep.EpisodeNumber, ep.Title, ep.Slug, ep.ContentJSON, ep.ContentHTML, ep.ContentText, wordCount, estReadingTime, ep.IsFree, ep.CoinPrice, ep.PreviewText, ep.AudioURL, ep.AudioVoice1Name, ep.AudioURL1, ep.AudioVoice2Name, ep.AudioURL2, ep.AudioVoice3Name, ep.AudioURL3, adminID)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create episode: " + err.Error()})
@@ -803,15 +907,15 @@ func (h *ContentHandler) AdminGetEpisodeByID(c echo.Context) error {
 	ctx := c.Request().Context()
 	var ep models.Episode
 	var contentJSON []byte
-	var contentHTML, contentText, previewText, audioURL, slug *string
+	var contentHTML, contentText, previewText, audioURL, audioURL1, audioURL2, audioURL3, slug *string
 	var seasonID *uuid.UUID
 
 	err = h.DB.QueryRowContext(ctx, `
-		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, status, published_at, created_at, updated_at
+		SELECT id, story_id, season_id, episode_number, title, slug, content_json, content_html, content_text, word_count, estimated_reading_time, is_free, coin_price, preview_text, audio_url, audio_voice_1_name, audio_url_1, audio_voice_2_name, audio_url_2, audio_voice_3_name, audio_url_3, status, published_at, created_at, updated_at
 		FROM episodes WHERE id = $1
 	`, episodeID).Scan(
 		&ep.ID, &ep.StoryID, &seasonID, &ep.EpisodeNumber, &ep.Title, &slug, &contentJSON, &contentHTML, &contentText,
-		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &audioURL, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
+		&ep.WordCount, &ep.EstimatedReadingTime, &ep.IsFree, &ep.CoinPrice, &previewText, &audioURL, &ep.AudioVoice1Name, &audioURL1, &ep.AudioVoice2Name, &audioURL2, &ep.AudioVoice3Name, &audioURL3, &ep.Status, &ep.PublishedAt, &ep.CreatedAt, &ep.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "episode not found"})
@@ -826,6 +930,11 @@ func (h *ContentHandler) AdminGetEpisodeByID(c echo.Context) error {
 	ep.ContentText = contentText
 	ep.PreviewText = previewText
 	ep.AudioURL = audioURL
+	ep.AudioURL1 = audioURL1
+	ep.AudioURL2 = audioURL2
+	ep.AudioURL3 = audioURL3
+	normalizeEpisodeAudio(&ep)
+	ep.AudioOptions = buildEpisodeAudioOptions(ep)
 
 	return c.JSON(http.StatusOK, ep)
 }
@@ -855,12 +964,13 @@ func (h *ContentHandler) AdminUpdateEpisode(c echo.Context) error {
 		wordCount = 100
 	}
 	estReadingTime := wordCount * 60 / 200
+	normalizeEpisodeAudio(&req)
 
 	_, err = h.DB.ExecContext(ctx, `
 		UPDATE episodes
-		SET title = $1, slug = $2, content_json = $3, content_html = $4, content_text = $5, word_count = $6, estimated_reading_time = $7, is_free = $8, coin_price = $9, preview_text = $10, audio_url = $11, status = $12, updated_by = $13, updated_at = now()
-		WHERE id = $14
-	`, req.Title, req.Slug, req.ContentJSON, req.ContentHTML, req.ContentText, wordCount, estReadingTime, req.IsFree, req.CoinPrice, req.PreviewText, req.AudioURL, req.Status, adminID, episodeID)
+		SET title = $1, slug = $2, content_json = $3, content_html = $4, content_text = $5, word_count = $6, estimated_reading_time = $7, is_free = $8, coin_price = $9, preview_text = $10, audio_url = $11, audio_voice_1_name = $12, audio_url_1 = $13, audio_voice_2_name = $14, audio_url_2 = $15, audio_voice_3_name = $16, audio_url_3 = $17, status = $18, updated_by = $19, updated_at = now()
+		WHERE id = $20
+	`, req.Title, req.Slug, req.ContentJSON, req.ContentHTML, req.ContentText, wordCount, estReadingTime, req.IsFree, req.CoinPrice, req.PreviewText, req.AudioURL, req.AudioVoice1Name, req.AudioURL1, req.AudioVoice2Name, req.AudioURL2, req.AudioVoice3Name, req.AudioURL3, req.Status, adminID, episodeID)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update episode"})
@@ -879,6 +989,113 @@ func (h *ContentHandler) AdminUpdateEpisode(c echo.Context) error {
 	`, adminID, episodeID, beforeJSON, afterJSON)
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// AdminUploadAudio stores an episode narration file and returns its public URL.
+func (h *ContentHandler) AdminUploadAudio(c echo.Context) error {
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxAudioUploadBytes)
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "audio file is required"})
+	}
+	if fileHeader.Size <= 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "audio file is empty"})
+	}
+	if fileHeader.Size > maxAudioUploadBytes {
+		return c.JSON(http.StatusRequestEntityTooLarge, map[string]string{"error": "audio file must be 100MB or smaller"})
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	defaultContentType, ok := allowedAudioExtensions[ext]
+	if !ok {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "unsupported audio format. Use mp3, m4a, aac, wav, ogg, opus, webm, or mp4"})
+	}
+
+	src, err := fileHeader.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to open uploaded audio"})
+	}
+	defer src.Close()
+
+	buffer := make([]byte, 512)
+	readBytes, _ := src.Read(buffer)
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to prepare uploaded audio"})
+	}
+
+	contentType := fileHeader.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(buffer[:readBytes])
+	}
+	if !isAllowedAudioContentType(contentType, defaultContentType) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "uploaded file does not look like a supported audio file"})
+	}
+
+	now := time.Now().UTC()
+	relativeDir := filepath.Join("audio", now.Format("2006"), now.Format("01"))
+	uploadDir := h.UploadDir
+	if strings.TrimSpace(uploadDir) == "" {
+		uploadDir = "uploads"
+	}
+	targetDir := filepath.Join(uploadDir, relativeDir)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create upload directory"})
+	}
+
+	fileName := uuid.NewString() + ext
+	targetPath := filepath.Join(targetDir, fileName)
+	dst, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create audio file"})
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		_ = os.Remove(targetPath)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save audio file"})
+	}
+
+	publicPath := "/" + filepath.ToSlash(filepath.Join("uploads", relativeDir, fileName))
+	publicURL := h.publicAssetURL(c, publicPath)
+
+	adminID, _ := uuid.Parse(c.Get("admin_id").(string))
+	_, _ = h.DB.ExecContext(c.Request().Context(), `
+		INSERT INTO admin_audit_logs (admin_user_id, action, entity_type, entity_id, after_data, created_at)
+		VALUES ($1, 'upload_audio', 'uploads', $2, $3, now())
+	`, adminID, uuid.New(), []byte(fmt.Sprintf(`{"url":%q,"file_name":%q,"size":%d}`, publicURL, fileHeader.Filename, fileHeader.Size)))
+
+	return c.JSON(http.StatusCreated, map[string]interface{}{
+		"url":          publicURL,
+		"path":         publicPath,
+		"file_name":    fileHeader.Filename,
+		"size":         fileHeader.Size,
+		"content_type": contentType,
+	})
+}
+
+func isAllowedAudioContentType(contentType string, defaultContentType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if strings.HasPrefix(normalized, "audio/") {
+		return true
+	}
+	switch normalized {
+	case "application/octet-stream", "video/mp4", "application/mp4":
+		return defaultContentType == "audio/mp4" || defaultContentType == "audio/ogg" || defaultContentType == "audio/webm"
+	default:
+		return false
+	}
+}
+
+func (h *ContentHandler) publicAssetURL(c echo.Context, publicPath string) string {
+	if strings.TrimSpace(h.PublicBaseURL) != "" {
+		return strings.TrimRight(h.PublicBaseURL, "/") + publicPath
+	}
+	scheme := c.Scheme()
+	if forwardedProto := c.Request().Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
+		scheme = strings.Split(forwardedProto, ",")[0]
+	}
+	return strings.TrimSpace(scheme) + "://" + c.Request().Host + publicPath
 }
 
 // AdminPublishStory changes story status to published (or archived)
@@ -1009,10 +1226,10 @@ func (h *ContentHandler) AdminGetStoryGenresMoods(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"all_genres":          allGenres,
-		"all_moods":           allMoods,
-		"selected_genre_ids":  selectedGenreIDs,
-		"selected_mood_ids":   selectedMoodIDs,
+		"all_genres":         allGenres,
+		"all_moods":          allMoods,
+		"selected_genre_ids": selectedGenreIDs,
+		"selected_mood_ids":  selectedMoodIDs,
 	})
 }
 

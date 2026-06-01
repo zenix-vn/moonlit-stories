@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"moonlit-backend/internal/ai"
 	"moonlit-backend/internal/analytics"
 	"moonlit-backend/internal/auth"
 	"moonlit-backend/internal/banner"
@@ -20,9 +21,8 @@ import (
 	"moonlit-backend/internal/reading"
 	"moonlit-backend/internal/redis"
 	"moonlit-backend/internal/rewards"
-	"moonlit-backend/internal/wallet"
 	"moonlit-backend/internal/subscription"
-	"moonlit-backend/internal/ai"
+	"moonlit-backend/internal/wallet"
 )
 
 func main() {
@@ -58,6 +58,7 @@ func main() {
 
 	// 4. Initialize Web Framework (Echo)
 	e := echo.New()
+	e.Static("/uploads", cfg.UploadDir)
 
 	// Register Standard Middlewares
 	e.Use(middleware.Logger())
@@ -70,7 +71,7 @@ func main() {
 
 	// Define Handlers
 	authHandler := &auth.AuthHandler{DB: db, Config: cfg}
-	contentHandler := &content.ContentHandler{DB: db}
+	contentHandler := &content.ContentHandler{DB: db, UploadDir: cfg.UploadDir, PublicBaseURL: cfg.PublicBaseURL}
 	readingHandler := &reading.ReadingHandler{DB: db}
 	walletHandler := &wallet.WalletHandler{DB: db}
 	rewardsHandler := &rewards.RewardsHandler{DB: db}
@@ -193,6 +194,7 @@ func main() {
 	adminGroup.GET("/episodes/:id", contentHandler.AdminGetEpisodeByID)
 	adminGroup.PATCH("/episodes/:id", contentHandler.AdminUpdateEpisode, auth.HasRoleCheck("editor"))
 	adminGroup.DELETE("/episodes/:id", contentHandler.AdminDeleteEpisode, auth.HasRoleCheck("editor"))
+	adminGroup.POST("/uploads/audio", contentHandler.AdminUploadAudio, auth.HasRoleCheck("editor"))
 	adminGroup.GET("/banners", bannerHandler.AdminListBanners, auth.HasRoleCheck("editor", "super_admin"))
 	adminGroup.POST("/banners", bannerHandler.AdminCreateBanner, auth.HasRoleCheck("editor", "super_admin"))
 	adminGroup.PATCH("/banners/:id", bannerHandler.AdminUpdateBanner, auth.HasRoleCheck("editor", "super_admin"))

@@ -276,15 +276,6 @@ struct WalletStatusCard: View {
                     color: Color.mlPink
                 )
                 
-                Spacer()
-                
-                // Free pass
-                WalletItemView(
-                    icon: "ticket.fill",
-                    amount: "\(wallet?.freePass ?? 0)",
-                    label: "Free Pass",
-                    color: Color(red: 0.2, green: 0.8, blue: 0.9)
-                )
             }
             .padding(.top, 4)
         }

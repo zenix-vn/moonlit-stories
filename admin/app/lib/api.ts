@@ -57,6 +57,36 @@ async function apiFetch(path: string, options: RequestOptions = {}) {
   return response.json();
 }
 
+async function apiUpload(path: string, formData: FormData) {
+  const token = getAuthToken();
+  const headers = new Headers();
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    removeAuthToken();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export const api = {
   // Auth
   login: async (email: string, password: string) => {
@@ -184,6 +214,12 @@ export const api = {
     return apiFetch(`/admin/episodes/${id}`, {
       method: "DELETE",
     });
+  },
+
+  uploadAudio: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiUpload("/admin/uploads/audio", formData);
   },
 
   // Banners

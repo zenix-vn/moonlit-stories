@@ -35,6 +35,9 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<!-- AdMob: replace with your real App ID from console.admob.google.com when enabling ads -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

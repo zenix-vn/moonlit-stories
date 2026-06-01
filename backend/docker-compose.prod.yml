@@ -41,6 +41,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET=${JWT_SECRET:-production_user_jwt_token_secret_string_321}
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET:-production_admin_jwt_token_secret_string_654}
+      - UPLOAD_DIR=/app/uploads
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://moonlit.zenix.vn}
+    volumes:
+      - backend_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,3 +67,4 @@ services:
 volumes:
   postgres_prod_data:
   redis_prod_data:
+  backend_uploads:

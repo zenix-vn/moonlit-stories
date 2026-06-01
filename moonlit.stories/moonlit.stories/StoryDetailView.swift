@@ -471,8 +471,10 @@ struct UnlockEpisodeSheet: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var showingShopSheet = false
+    @State private var showingMoonPassSheet = false
     @State private var isUnlocking = false
     @State private var errorMessage: String? = nil
+    private var adManager: AdManager { AdManager.shared }
 
     var body: some View {
         ZStack {
@@ -558,47 +560,26 @@ struct UnlockEpisodeSheet: View {
                         subtitle: "Free access for 24 hours",
                         badge: "FREE",
                         action: {
-                            Task {
-                                isUnlocking = true
-                                errorMessage = nil
-                                do {
-                                    let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: episode.id)
-                                    if res.status == "unlocked" || res.status == "already_unlocked" {
-                                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-                                        onUnlocked()
-                                        dismiss()
+                            errorMessage = nil
+                            adManager.requestAd(
+                                onReward: {
+                                    isUnlocking = true
+                                    do {
+                                        let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: episode.id)
+                                        if res.status == "unlocked" || res.status == "already_unlocked" {
+                                            NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
+                                            onUnlocked()
+                                            dismiss()
+                                        }
+                                    } catch {
+                                        errorMessage = error.localizedDescription
                                     }
-                                } catch {
-                                    errorMessage = error.localizedDescription
+                                    isUnlocking = false
+                                },
+                                onFail: { msg in
+                                    errorMessage = msg
                                 }
-                                isUnlocking = false
-                            }
-                        }
-                    )
-                    Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
-
-                    UnlockOptionRow(
-                        icon: "ticket.fill",
-                        iconColor: Color(red: 0.4, green: 0.9, blue: 0.6),
-                        title: "Use Free Pass",
-                        subtitle: "You have 0 free passes",
-                        badge: nil,
-                        action: {
-                            Task {
-                                isUnlocking = true
-                                errorMessage = nil
-                                do {
-                                    let res = try await NetworkService.shared.unlockEpisodeWithFreePass(episodeId: episode.id)
-                                    if res.status == "unlocked" || res.status == "already_unlocked" {
-                                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-                                        onUnlocked()
-                                        dismiss()
-                                    }
-                                } catch {
-                                    errorMessage = error.localizedDescription
-                                }
-                                isUnlocking = false
-                            }
+                            )
                         }
                     )
                     Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
@@ -610,7 +591,7 @@ struct UnlockEpisodeSheet: View {
                         subtitle: "Unlimited access · All stories",
                         badge: "BEST VALUE",
                         action: {
-                            showingShopSheet = true
+                            showingMoonPassSheet = true
                         }
                     )
                 }
@@ -626,10 +607,162 @@ struct UnlockEpisodeSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: Binding(
+            get: { adManager.isShowingDevAd },
+            set: { if !$0 { adManager.cancelDevAd() } }
+        )) {
+            DevAdView()
+        }
         .sheet(isPresented: $showingShopSheet) {
             NavigationStack {
                 CoinShopView()
             }
+        }
+        .sheet(isPresented: $showingMoonPassSheet) {
+            MoonPassSubscriptionView(
+                episodeTitle: "Ep \(episode.episodeNumber) · \(episode.title)",
+                onActivated: {
+                    onUnlocked()
+                    dismiss()
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct MoonPassSubscriptionView: View {
+    let episodeTitle: String
+    let onActivated: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var purchaseManager = SubscriptionPurchaseManager()
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.06, green: 0.04, blue: 0.12).ignoresSafeArea()
+
+            VStack(spacing: 22) {
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(colors: [Color.mlPurple.opacity(0.35), Color.mlPink.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 72, height: 72)
+                        Image(systemName: "moon.stars.fill")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(Color.mlPurple)
+                    }
+
+                    Text("MoonPass Subscription")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundStyle(Color.white)
+
+                    Text(episodeTitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.mlSubtext)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 28)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    MoonPassBenefitRow(icon: "book.closed.fill", text: "Unlimited access to all story episodes")
+                    MoonPassBenefitRow(icon: "headphones", text: "Premium audio options when available")
+                    MoonPassBenefitRow(icon: "sparkles", text: "Ready for future subscriber-only features")
+                }
+                .padding(18)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.04)))
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+                .padding(.horizontal, 20)
+
+                if purchaseManager.isLoading {
+                    ProgressView().tint(Color.mlPurple)
+                } else {
+                    VStack(spacing: 10) {
+                        Button {
+                            Task {
+                                if await purchaseManager.purchaseMoonPass() {
+                                    onActivated()
+                                    dismiss()
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                if purchaseManager.isPurchasing {
+                                    ProgressView().tint(Color.white)
+                                }
+                                Text(primaryButtonTitle)
+                                    .font(.system(size: 15, weight: .bold))
+                            }
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(LinearGradient(colors: [Color.mlPurple, Color.mlPurpleDim], startPoint: .leading, endPoint: .trailing))
+                            .clipShape(Capsule())
+                        }
+                        .disabled(purchaseManager.isPurchasing || purchaseManager.offer?.isPurchasable != true)
+
+                        Button {
+                            Task {
+                                if await purchaseManager.restoreMoonPass() {
+                                    onActivated()
+                                    dismiss()
+                                }
+                            }
+                        } label: {
+                            Text("Restore Purchase")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.mlSubtext)
+                        }
+                        .disabled(purchaseManager.isPurchasing)
+                    }
+                    .padding(.horizontal, 20)
+                }
+
+                if let error = purchaseManager.errorMessage {
+                    Text(error)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.mlPink)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+
+                Button("Maybe Later") {
+                    dismiss()
+                }
+                .font(.system(size: 14))
+                .foregroundStyle(Color.mlSubtext)
+                .padding(.bottom, 24)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            await purchaseManager.loadMoonPassOffer()
+        }
+    }
+
+    private var primaryButtonTitle: String {
+        guard let offer = purchaseManager.offer else {
+            return "MoonPass Unavailable"
+        }
+        return "Start MoonPass · \(offer.displayPrice)"
+    }
+}
+
+private struct MoonPassBenefitRow: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.mlPurple)
+                .frame(width: 22)
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.86))
+            Spacer()
         }
     }
 }

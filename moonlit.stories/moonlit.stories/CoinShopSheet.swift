@@ -5,7 +5,6 @@ struct CoinShopView: View {
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     @State private var currentBalance: Int = 0
-    @State private var freePasses: Int = 0
     @State private var gems: Int = 0
     
     var body: some View {
@@ -65,14 +64,6 @@ struct CoinShopView: View {
                                 )
                                 
                                 Spacer()
-                                
-                                // Free Pass
-                                WalletDetailItem(
-                                    icon: "ticket.fill",
-                                    amount: "\(freePasses)",
-                                    label: "Free Pass",
-                                    color: Color(red: 0.2, green: 0.8, blue: 0.9)
-                                )
                             }
                         }
                         .padding(24)
@@ -151,7 +142,6 @@ struct CoinShopView: View {
             let me = try await NetworkService.shared.fetchMe()
             await MainActor.run {
                 self.currentBalance = me.wallet.coins
-                self.freePasses = me.wallet.freePass
                 self.gems = me.wallet.gems
                 self.isLoading = false
             }

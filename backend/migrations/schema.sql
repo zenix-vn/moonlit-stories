@@ -119,6 +119,12 @@ CREATE TABLE IF NOT EXISTS episodes (
   coin_price INT,
   preview_text TEXT,
   audio_url TEXT,
+  audio_voice_1_name TEXT NOT NULL DEFAULT 'Reader 1',
+  audio_url_1 TEXT,
+  audio_voice_2_name TEXT NOT NULL DEFAULT 'Reader 2',
+  audio_url_2 TEXT,
+  audio_voice_3_name TEXT NOT NULL DEFAULT 'Reader 3',
+  audio_url_3 TEXT,
   status TEXT NOT NULL DEFAULT 'draft', -- 'draft', 'scheduled', 'published', 'archived'
   published_at TIMESTAMPTZ,
   created_by UUID,
@@ -131,6 +137,20 @@ CREATE TABLE IF NOT EXISTS episodes (
 -- Ensure older databases (created before audio_url was introduced) are upgraded.
 ALTER TABLE IF EXISTS episodes
   ADD COLUMN IF NOT EXISTS audio_url TEXT;
+
+-- Multi-voice narration support. audio_url remains as the legacy Reader 1 URL.
+ALTER TABLE IF EXISTS episodes
+  ADD COLUMN IF NOT EXISTS audio_voice_1_name TEXT NOT NULL DEFAULT 'Reader 1',
+  ADD COLUMN IF NOT EXISTS audio_url_1 TEXT,
+  ADD COLUMN IF NOT EXISTS audio_voice_2_name TEXT NOT NULL DEFAULT 'Reader 2',
+  ADD COLUMN IF NOT EXISTS audio_url_2 TEXT,
+  ADD COLUMN IF NOT EXISTS audio_voice_3_name TEXT NOT NULL DEFAULT 'Reader 3',
+  ADD COLUMN IF NOT EXISTS audio_url_3 TEXT;
+
+UPDATE episodes
+SET audio_url_1 = audio_url
+WHERE audio_url_1 IS NULL
+  AND audio_url IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS episode_versions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -647,6 +667,9 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_country_time ON analytics_events
 
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_platform_transaction
+  ON purchases(platform, platform_transaction_id)
+  WHERE platform_transaction_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_episode_unlocks_user_episode ON episode_unlocks(user_id, episode_id);
 
 -- =========================================================================

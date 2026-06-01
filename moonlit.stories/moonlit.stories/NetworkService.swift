@@ -805,16 +805,8 @@ class NetworkService {
     // Unlock episode with Coins
     func unlockEpisodeWithCoins(episodeId: String) async throws -> UnlockResponse {
         let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/coins")
-        // Invalidate episode detail cache so hasAccess updates
         APICache.shared.invalidate("episode_\(episodeId)")
-        APICache.shared.invalidate(APICache.Key.libraryMap)
-        return result
-    }
-
-    // Unlock episode with Free Pass
-    func unlockEpisodeWithFreePass(episodeId: String) async throws -> UnlockResponse {
-        let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/free-pass")
-        APICache.shared.invalidate("episode_\(episodeId)")
+        APICache.shared.invalidatePrefix("episodes_")
         APICache.shared.invalidate(APICache.Key.libraryMap)
         return result
     }
@@ -823,6 +815,7 @@ class NetworkService {
     func unlockEpisodeWithAd(episodeId: String) async throws -> UnlockResponse {
         let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/ad")
         APICache.shared.invalidate("episode_\(episodeId)")
+        APICache.shared.invalidatePrefix("episodes_")
         APICache.shared.invalidate(APICache.Key.libraryMap)
         return result
     }
@@ -833,9 +826,17 @@ class NetworkService {
     }
 
     // Verify IAP Receipt/Purchase on Server
-    func verifyIAPPurchase(productCode: String, transactionId: String) async throws -> IAPVerifyResponse {
-        let request = IAPVerifyRequest(productCode: productCode, platform: "apple", transactionID: transactionId)
-        return try await authenticatedPost("/v1/iap/verify", body: request)
+    func verifyIAPPurchase(productCode: String, transactionId: String, signedTransaction: String? = nil) async throws -> IAPVerifyResponse {
+        let request = IAPVerifyRequest(
+            productCode: productCode,
+            platform: "apple",
+            transactionID: transactionId,
+            signedTransaction: signedTransaction
+        )
+        let result: IAPVerifyResponse = try await authenticatedPost("/v1/iap/verify", body: request)
+        APICache.shared.invalidatePrefix("episodes_")
+        APICache.shared.invalidate(APICache.Key.libraryMap)
+        return result
     }
 
     func fetchRewardsDashboard() async throws -> RewardsDashboard {
@@ -1150,6 +1151,24 @@ struct EpisodeMeta: Codable, Identifiable {
     }
 }
 
+struct AudioOption: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let source: String
+    let url: String?
+    let isDefault: Bool
+    let accessTier: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case source
+        case url
+        case isDefault = "is_default"
+        case accessTier = "access_tier"
+    }
+}
+
 struct EpisodeDetail: Codable, Identifiable {
     let id: String
     let storyId: String
@@ -1160,6 +1179,7 @@ struct EpisodeDetail: Codable, Identifiable {
     let contentText: String?
     let previewText: String?
     let audioUrl: String?
+    let audioOptions: [AudioOption]
     let isFree: Bool
     let coinPrice: Int
     let wordCount: Int
@@ -1176,6 +1196,7 @@ struct EpisodeDetail: Codable, Identifiable {
         case contentText = "content_text"
         case previewText = "preview_text"
         case audioUrl = "audio_url"
+        case audioOptions = "audio_options"
         case isFree = "is_free"
         case coinPrice = "coin_price"
         case wordCount = "word_count"
@@ -1194,6 +1215,7 @@ struct EpisodeDetail: Codable, Identifiable {
         contentText = try c.decodeIfPresent(String.self, forKey: .contentText)
         previewText = try c.decodeIfPresent(String.self, forKey: .previewText)
         audioUrl = try c.decodeIfPresent(String.self, forKey: .audioUrl)
+        audioOptions = try c.decodeIfPresent([AudioOption].self, forKey: .audioOptions) ?? []
         isFree = try c.decodeIfPresent(Bool.self, forKey: .isFree) ?? false
         coinPrice = try c.decodeIfPresent(Int.self, forKey: .coinPrice) ?? 0
         wordCount = try c.decodeIfPresent(Int.self, forKey: .wordCount) ?? 0
@@ -1324,6 +1346,8 @@ struct Product: Codable, Identifiable {
     let code: String
     let name: String
     let type: String // 'coin_pack', 'subscription'
+    let platform: String?
+    let platformProductID: String?
     let price: Double
     let currency: String
     let coinAmount: Int?
@@ -1331,7 +1355,8 @@ struct Product: Codable, Identifiable {
     let active: Bool
     
     enum CodingKeys: String, CodingKey {
-        case id, code, name, type, price, currency, active
+        case id, code, name, type, platform, price, currency, active
+        case platformProductID = "platform_product_id"
         case coinAmount = "coin_amount"
         case bonusCoinAmount = "bonus_coin_amount"
     }
@@ -1341,15 +1366,18 @@ struct IAPVerifyRequest: Encodable {
     let productCode: String
     let platform: String
     let transactionID: String
+    let signedTransaction: String?
     
     enum CodingKeys: String, CodingKey {
         case productCode = "product_code"
         case platform
         case transactionID = "transaction_id"
+        case signedTransaction = "signed_transaction"
     }
 }
 
 struct IAPVerifyResponse: Decodable {
     let status: String
     let wallet: Wallet?
+    let subscription: SubscriptionDetail?
 }

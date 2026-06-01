@@ -11,7 +11,7 @@ struct HelpFeedbackView: View {
     private let supportEmail = "support@moonlit.vn"
     private let faqItems = [
         (title: "How do I restore purchases?", description: "Open App Store purchases and use the same Apple ID to restore your MoonPass or coin packs."),
-        (title: "Why can’t I unlock an episode?", description: "Locked chapters require coins, free passes, or an active MoonPass subscription. Check your wallet balance first."),
+        (title: "Why can’t I unlock an episode?", description: "Locked chapters require coins or an active MoonPass subscription. Check your wallet balance first."),
         (title: "How do I cancel subscription?", description: "Subscriptions are managed through Apple App Store. Cancel anytime from your Apple account settings."),
         (title: "How do I report a bug?", description: "Use the feedback form below or send an email to support@moonlit.vn with a description of the issue.")
     ]
