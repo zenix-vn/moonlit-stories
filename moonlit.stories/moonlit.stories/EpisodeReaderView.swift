@@ -190,7 +190,7 @@ struct EpisodeReaderView: View {
         }
         .preferredColorScheme(settings.isDarkMode ? .dark : .light)
         .overlay {
-            if viewModel.episode?.audioUrl != nil {
+            if let ep = viewModel.episode, ep.hasAccess {
                 GeometryReader { geo in
                     // Backdrop — captures taps outside the bubble to collapse it
                     if bubbleExpanded {
@@ -239,6 +239,25 @@ struct EpisodeReaderView: View {
         .onChange(of: selectedNewEpisodeId) { _, newId in
             guard let newId else { return }
             Task { await loadAndSyncEpisode(id: newId) }
+        }
+        .onChange(of: viewModel.episode?.hasAccess) { oldHasAccess, newHasAccess in
+            if newHasAccess == true, oldHasAccess != true {
+                if let ep = viewModel.episode {
+                    if let url = ep.audioUrl, !url.isEmpty {
+                        audioPlayer.load(
+                            urlString: url,
+                            episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
+                            storyTitle: story.title
+                        )
+                    } else if let content = ep.contentText, !content.isEmpty {
+                        audioPlayer.loadTTS(
+                            text: cleanHTMLTags(content),
+                            episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
+                            storyTitle: story.title
+                        )
+                    }
+                }
+            }
         }
         .onDisappear {
             Task {
@@ -888,12 +907,20 @@ struct EpisodeReaderView: View {
             }
         }
         
-        if let ep = viewModel.episode, let url = ep.audioUrl {
-            audioPlayer.load(
-                urlString: url,
-                episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
-                storyTitle: story.title
-            )
+        if let ep = viewModel.episode {
+            if let url = ep.audioUrl, !url.isEmpty {
+                audioPlayer.load(
+                    urlString: url,
+                    episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
+                    storyTitle: story.title
+                )
+            } else if let content = ep.contentText, !content.isEmpty {
+                audioPlayer.loadTTS(
+                    text: cleanHTMLTags(content),
+                    episodeTitle: "Ep \(ep.episodeNumber) · \(ep.title)",
+                    storyTitle: story.title
+                )
+            }
         }
     }
 
