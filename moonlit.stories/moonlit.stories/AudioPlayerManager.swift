@@ -138,34 +138,14 @@ class AudioPlayerManager: NSObject, AVSpeechSynthesizerDelegate {
             currentCharacterIndex = 0
         }
 
-        let lang = detectLanguage(of: ttsText)
-
         let utterance = AVSpeechUtterance(string: textToSpeak)
-        utterance.voice = AVSpeechSynthesisVoice(language: lang)
-        utterance.rate = normalTTSRate()
-        utterance.pitchMultiplier = 1.0
-        utterance.volume = 1.0
-        utterance.prefersAssistiveTechnologySettings = false
-        utterance.preUtteranceDelay = 0
-        utterance.postUtteranceDelay = 0
+        // Always read with the default English voice. Leave rate/pitch/volume at system defaults.
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
 
         ttsUtterance = utterance
         isPlaying = true
         synthesizer?.speak(utterance)
         updateNowPlayingInfo()
-    }
-
-    private func normalTTSRate() -> Float {
-        let base = AVSpeechUtteranceDefaultSpeechRate * playbackRate
-        return min(max(base, AVSpeechUtteranceMinimumSpeechRate), AVSpeechUtteranceMaximumSpeechRate)
-    }
-
-    private func detectLanguage(of text: String) -> String {
-        let vietnameseCharacters = CharacterSet(charactersIn: "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệđìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆĐÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ")
-        if text.rangeOfCharacter(from: vietnameseCharacters) != nil {
-            return "vi-VN"
-        }
-        return "en-US"
     }
 
     // MARK: - AVSpeechSynthesizerDelegate
