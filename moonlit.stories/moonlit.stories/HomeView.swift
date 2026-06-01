@@ -944,7 +944,7 @@ private struct ContinueReadingDestinationView: View {
                 EmptyView()
             }
         }
-        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await loadDestinationData()
         }
