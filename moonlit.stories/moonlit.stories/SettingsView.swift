@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import AppTrackingTransparency
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -31,6 +32,9 @@ struct SettingsView: View {
     @State private var isShowingLogoutConfirmation = false
     @State private var isShowingDeleteAccountConfirmation = false
     @State private var isDeletingAccount = false
+    
+    // Tracking settings state
+    @State private var trackingStatus: ATTrackingManager.AuthorizationStatus = .notDetermined
 
     let fontOptions = ["System", "Georgia", "Baskerville", "Avenir"]
     let themeOptions = ["Dark", "Charcoal", "Sepia"]
@@ -276,6 +280,118 @@ struct SettingsView: View {
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.mlCard))
                         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
                         
+                        // SECTION 4.5: TRACKING & ADS
+                        SettingsSectionHeader(title: "Tracking & Ads", icon: "hand.raised.fill")
+                        
+                        VStack(spacing: 16) {
+                            Button(action: {
+                                if let url = URL(string: UIApplication.openSettingsURLString), UIApplication.shared.canOpenURL(url) {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
+                                HStack(spacing: 12) {
+                                    let isAuthorized = trackingStatus == .authorized
+                                    Image(systemName: isAuthorized ? "checkmark.shield.fill" : "shield.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(isAuthorized ? Color.green : Color.mlSubtext)
+                                        .frame(width: 32, height: 32)
+                                        .background(Circle().fill((isAuthorized ? Color.green : Color.white).opacity(0.1)))
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("App Tracking")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(Color.white)
+                                        Text(isAuthorized ? "Personalized ads enabled" : "Personalized ads disabled")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Color.mlSubtext)
+                                            .multilineTextAlignment(.leading)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(statusBadgeText(for: trackingStatus))
+                                        .font(.system(size: 12, weight: .bold))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 4)
+                                        .background(Capsule().fill(statusBadgeBgColor(for: trackingStatus)))
+                                        .foregroundStyle(statusBadgeTextColor(for: trackingStatus))
+                                    
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.mlSubtext.opacity(0.5))
+                                }
+                            }
+                        }
+                        .padding(16)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.mlCard))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+                        
+                        // SECTION 4.6: PRIVACY & LEGAL
+                        SettingsSectionHeader(title: "Privacy & Legal", icon: "shield.fill")
+                        
+                        VStack(spacing: 16) {
+                            // Privacy Policy Row
+                            Button(action: {
+                                UIApplication.shared.open(LegalLinks.privacyPolicy)
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "shield.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(Color.green)
+                                        .frame(width: 32, height: 32)
+                                        .background(Circle().fill(Color.green.opacity(0.1)))
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Privacy Policy")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(Color.white)
+                                        Text("How we protect your data")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Color.mlSubtext)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.mlSubtext.opacity(0.5))
+                                }
+                            }
+                            
+                            Divider().background(Color.white.opacity(0.08))
+                            
+                            // Terms of Use Row
+                            Button(action: {
+                                UIApplication.shared.open(LegalLinks.termsOfUse)
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "doc.text.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(Color.blue)
+                                        .frame(width: 32, height: 32)
+                                        .background(Circle().fill(Color.blue.opacity(0.1)))
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Terms of Use")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(Color.white)
+                                        Text("Read our terms")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Color.mlSubtext)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.mlSubtext.opacity(0.5))
+                                }
+                            }
+                        }
+                        .padding(16)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.mlCard))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+                        
                         // SECTION 5: APP UTILITIES
                         SettingsSectionHeader(title: "Maintenance", icon: "command")
                         
@@ -342,15 +458,6 @@ struct SettingsView: View {
                                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.mlPink.opacity(0.25), lineWidth: 1))
                             }
                             .disabled(isDeletingAccount)
-
-                            HStack(spacing: 8) {
-                                Link("Privacy Policy", destination: LegalLinks.privacyPolicy)
-                                Text("·").foregroundStyle(Color.mlSubtext.opacity(0.5))
-                                Link("Terms of Use", destination: LegalLinks.termsOfUse)
-                            }
-                            .font(.system(size: 12, weight: .semibold))
-                            .tint(Color.mlPurple)
-                            .padding(.top, 12)
 
                             Text(appVersionText)
                                 .font(.system(size: 11))
@@ -439,6 +546,7 @@ struct SettingsView: View {
             Text("This permanently deletes your account, coins, library, and reading history. This action cannot be undone.")
         }
         .onAppear {
+            updateTrackingStatus()
             // Pre-fill local fields with profile info
             Task {
                 do {
@@ -484,6 +592,39 @@ struct SettingsView: View {
                     #endif
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            updateTrackingStatus()
+        }
+    }
+    
+    private func updateTrackingStatus() {
+        trackingStatus = ATTrackingManager.trackingAuthorizationStatus
+    }
+    
+    private func statusBadgeText(for status: ATTrackingManager.AuthorizationStatus) -> String {
+        switch status {
+        case .authorized: return "Allowed"
+        case .denied: return "Denied"
+        case .restricted: return "Restricted"
+        case .notDetermined: return "Not Asked"
+        @unknown default: return "Unknown"
+        }
+    }
+    
+    private func statusBadgeBgColor(for status: ATTrackingManager.AuthorizationStatus) -> Color {
+        switch status {
+        case .authorized: return Color.green.opacity(0.15)
+        case .denied: return Color.red.opacity(0.15)
+        default: return Color.white.opacity(0.08)
+        }
+    }
+    
+    private func statusBadgeTextColor(for status: ATTrackingManager.AuthorizationStatus) -> Color {
+        switch status {
+        case .authorized: return Color.green
+        case .denied: return Color.red
+        default: return Color.mlSubtext
         }
     }
 }
