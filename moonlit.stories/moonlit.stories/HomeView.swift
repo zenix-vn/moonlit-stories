@@ -852,7 +852,6 @@ struct ContinueCard: View {
     let item: ContinueReadingItem
     
     var body: some View {
-        let colors = getGradientForString(item.storyTitle)
         HStack(spacing: 12) {
             ZStack {
                 StoryCoverView(
@@ -1009,7 +1008,6 @@ struct AudioCard: View {
     let story: Story
 
     var body: some View {
-        let colors = getGradientForString(story.title)
         let ratingVal = 4.5 + Double(abs(story.title.hashValue) % 5) / 10.0
         let durationStr = "\(1 + abs(story.title.hashValue) % 3)h"
         

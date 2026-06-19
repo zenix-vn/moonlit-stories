@@ -194,7 +194,7 @@ struct HelpFeedbackView: View {
     }
 
     private func sendFeedbackEmail() {
-        guard let encodedBody = feedbackText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+        guard feedbackText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) != nil else {
             alertMessage = "Unable to prepare email content."
             showAlert = true
             return
