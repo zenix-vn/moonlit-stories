@@ -598,7 +598,7 @@ struct UnlockEpisodeSheet: View {
                     dismiss()
                 }
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.fraction(0.85), .large])
             .presentationDragIndicator(.visible)
         }
     }
@@ -650,6 +650,42 @@ private struct MoonPassSubscriptionView: View {
                 if purchaseManager.isLoading {
                     ProgressView().tint(Color.mlPurple)
                 } else {
+                    // Subscription options list
+                    VStack(spacing: 8) {
+                        ForEach(purchaseManager.offers) { offer in
+                            let isSelected = purchaseManager.selectedOffer?.backendProduct.code == offer.backendProduct.code
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    purchaseManager.selectedOffer = offer
+                                }
+                            }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(offer.displayName)
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(Color.white)
+                                        Text(offer.displayPeriodDescription)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(Color.mlSubtext)
+                                    }
+                                    Spacer()
+                                    Text(offer.displayPrice)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(Color.white)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 4)
+                                        .background(Capsule().fill(isSelected ? Color.mlPurple : Color.white.opacity(0.08)))
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(isSelected ? Color.mlPurple.opacity(0.12) : Color.white.opacity(0.02)))
+                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(isSelected ? Color.mlPurple : Color.white.opacity(0.06), lineWidth: 1.5))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+                    
                     VStack(spacing: 10) {
                         Button {
                             Task {
@@ -672,7 +708,7 @@ private struct MoonPassSubscriptionView: View {
                             .background(LinearGradient(colors: [Color.mlPurple, Color.mlPurpleDim], startPoint: .leading, endPoint: .trailing))
                             .clipShape(Capsule())
                         }
-                        .disabled(purchaseManager.isPurchasing || purchaseManager.offer?.isPurchasable != true)
+                        .disabled(purchaseManager.isPurchasing || purchaseManager.selectedOffer?.isPurchasable != true)
 
                         Button {
                             Task {
@@ -731,7 +767,7 @@ private struct MoonPassSubscriptionView: View {
     }
 
     private var primaryButtonTitle: String {
-        guard let offer = purchaseManager.offer else {
+        guard let offer = purchaseManager.selectedOffer else {
             return "MoonPass Unavailable"
         }
         if let period = offer.periodText {
@@ -741,7 +777,7 @@ private struct MoonPassSubscriptionView: View {
     }
 
     private var renewalDisclosure: String {
-        guard let offer = purchaseManager.offer, let period = offer.periodText else {
+        guard let offer = purchaseManager.selectedOffer, let period = offer.periodText else {
             return "Payment is charged to your Apple ID. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in App Store settings."
         }
         return "\(offer.displayName) is \(offer.displayPrice) per \(period). Payment is charged to your Apple ID at confirmation. It automatically renews unless cancelled at least 24 hours before the period ends. Manage or cancel anytime in App Store settings."

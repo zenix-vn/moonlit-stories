@@ -2,7 +2,8 @@ import Foundation
 import Observation
 import StoreKit
 
-struct MoonPassOffer {
+struct MoonPassOffer: Identifiable {
+    var id: String { backendProduct.code }
     let backendProduct: Product
     let storeProduct: StoreKit.Product?
 
@@ -23,7 +24,16 @@ struct MoonPassOffer {
 
     /// Human-readable billing period, e.g. "month", "year", "week".
     var periodText: String? {
-        guard let period = storeProduct?.subscription?.subscriptionPeriod else { return nil }
+        guard let period = storeProduct?.subscription?.subscriptionPeriod else {
+            // Fallback from product code
+            switch backendProduct.code {
+            case "moonpass_weekly": return "week"
+            case "moonpass_monthly": return "month"
+            case "moonpass_quarterly": return "3 months"
+            case "moonpass_yearly": return "year"
+            default: return "month"
+            }
+        }
         let unit: String
         switch period.unit {
         case .day:   unit = "day"
@@ -34,12 +44,20 @@ struct MoonPassOffer {
         }
         return period.value == 1 ? unit : "\(period.value) \(unit)s"
     }
+    
+    var displayPeriodDescription: String {
+        if let periodText {
+            return "Billed every \(periodText)"
+        }
+        return "Billed periodically"
+    }
 }
 
 @MainActor
 @Observable
 final class SubscriptionPurchaseManager {
-    var offer: MoonPassOffer?
+    var offers: [MoonPassOffer] = []
+    var selectedOffer: MoonPassOffer?
     var isLoading = false
     var isPurchasing = false
     var errorMessage: String?
@@ -51,36 +69,48 @@ final class SubscriptionPurchaseManager {
 
         do {
             let products = try await NetworkService.shared.fetchProducts()
-            guard let moonPass = products.first(where: { $0.type == "subscription" && $0.active }) else {
+            let subscriptionProducts = products.filter { $0.type == "subscription" && $0.active }
+            
+            if subscriptionProducts.isEmpty {
                 errorMessage = "MoonPass is not configured yet."
-                offer = nil
+                offers = []
+                selectedOffer = nil
                 return
             }
 
-            guard let productID = moonPass.platformProductID, !productID.isEmpty else {
-                errorMessage = "MoonPass product ID is missing."
-                offer = MoonPassOffer(backendProduct: moonPass, storeProduct: nil)
-                return
+            var loadedOffers: [MoonPassOffer] = []
+            for sub in subscriptionProducts {
+                guard let productID = sub.platformProductID, !productID.isEmpty else {
+                    continue
+                }
+                
+                let storeProducts = try? await StoreKit.Product.products(for: [productID])
+                let storeProduct = storeProducts?.first(where: { $0.id == productID })
+                
+                loadedOffers.append(MoonPassOffer(backendProduct: sub, storeProduct: storeProduct))
             }
-
-            let storeProducts = try await StoreKit.Product.products(for: [productID])
-            offer = MoonPassOffer(
-                backendProduct: moonPass,
-                storeProduct: storeProducts.first(where: { $0.id == productID })
-            )
-
-            if offer?.storeProduct == nil {
-                errorMessage = "MoonPass is not available from the App Store on this device."
-            }
+            
+            // Order weekly, monthly, quarterly, yearly
+            let order = ["moonpass_weekly": 1, "moonpass_monthly": 2, "moonpass_quarterly": 3, "moonpass_yearly": 4]
+            loadedOffers.sort { (order[$0.backendProduct.code] ?? 99) < (order[$1.backendProduct.code] ?? 99) }
+            
+            self.offers = loadedOffers
+            self.selectedOffer = loadedOffers.first(where: { $0.backendProduct.code == "moonpass_monthly" }) ?? loadedOffers.first
+            
         } catch {
             errorMessage = error.localizedDescription
-            offer = nil
+            offers = []
+            selectedOffer = nil
         }
     }
 
     func purchaseMoonPass() async -> Bool {
-        guard let offer, let storeProduct = offer.storeProduct else {
-            errorMessage = "MoonPass is not ready for purchase."
+        guard let selectedOffer else {
+            errorMessage = "Please select a subscription offer."
+            return false
+        }
+        guard let storeProduct = selectedOffer.storeProduct else {
+            errorMessage = "Selected subscription is not available in the App Store."
             return false
         }
 
@@ -94,13 +124,13 @@ final class SubscriptionPurchaseManager {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
                 _ = try await NetworkService.shared.verifyIAPPurchase(
-                    productCode: offer.backendProduct.code,
+                    productCode: selectedOffer.backendProduct.code,
                     transactionId: String(transaction.id),
                     signedTransaction: verification.jwsRepresentation
                 )
                 await transaction.finish()
                 AnalyticsService.shared.track(.purchaseSuccess, [
-                    "product_code": offer.backendProduct.code,
+                    "product_code": selectedOffer.backendProduct.code,
                     "product_type": "subscription",
                     "transaction_id": String(transaction.id)
                 ])

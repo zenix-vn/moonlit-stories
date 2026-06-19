@@ -47,6 +47,11 @@ func main() {
 		log.Printf("Warning during database auto-migration: %v\n", err)
 	}
 
+	// Sync subscription products configuration dynamically at boot
+	if err := syncSubscriptionProducts(db); err != nil {
+		log.Printf("Warning: Failed to sync subscription products: %v\n", err)
+	}
+
 	// 3. Initialize Redis Connection (Warning only, don't crash if Redis is not running locally)
 	rdb, err := redis.InitRedis(cfg.RedisURL)
 	if err != nil {
@@ -302,6 +307,29 @@ func runAutoMigration(db *sql.DB) error {
 	fmt.Println("Database schemas and seed data created successfully.")
 	return nil
 }
+
+func syncSubscriptionProducts(db *sql.DB) error {
+	query := `
+		INSERT INTO products (code, name, type, platform, platform_product_id, price, coin_amount, bonus_coin_amount, active)
+		VALUES
+		  ('moonpass_weekly', 'MoonPass Weekly', 'subscription', 'all', 'com.moonlit.weekly_2_99usd', 2.99, NULL, NULL, true),
+		  ('moonpass_monthly', 'MoonPass Monthly', 'subscription', 'all', 'com.moonlit.monthly_5_99usd', 5.99, NULL, NULL, true),
+		  ('moonpass_quarterly', 'MoonPass Quarterly', 'subscription', 'all', 'com.moonlit.quarterly_14_99usd', 14.99, NULL, NULL, true),
+		  ('moonpass_yearly', 'MoonPass Yearly', 'subscription', 'all', 'com.moonlit.yearly_29_99usd', 29.99, NULL, NULL, true)
+		ON CONFLICT (code) DO UPDATE SET
+		  name = EXCLUDED.name,
+		  platform_product_id = EXCLUDED.platform_product_id,
+		  price = EXCLUDED.price,
+		  active = EXCLUDED.active;
+	`
+	_, err := db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to sync subscription products: %w", err)
+	}
+	fmt.Println("Subscription products synced successfully.")
+	return nil
+}
+
 func findProjectRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {

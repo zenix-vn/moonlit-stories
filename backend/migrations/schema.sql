@@ -750,8 +750,15 @@ INSERT INTO products (id, code, name, type, platform, platform_product_id, price
   ('40000000-0000-0000-0000-000000000001', 'coin_pack_99', 'Starter Coins', 'coin_pack', 'all', 'com.moonlit.coins.99', 0.99, 120, 0),
   ('40000000-0000-0000-0000-000000000002', 'coin_pack_499', 'Reader Bundle', 'coin_pack', 'all', 'com.moonlit.coins.499', 4.99, 700, 50),
   ('40000000-0000-0000-0000-000000000003', 'coin_pack_999', 'Binge Chest', 'coin_pack', 'all', 'com.moonlit.coins.999', 9.99, 1500, 150),
-  ('40000000-0000-0000-0000-000000000004', 'moonpass_monthly', 'MoonPass Monthly', 'subscription', 'all', 'com.moonlit.moonpass.monthly', 5.99, NULL, NULL)
-ON CONFLICT (code) DO NOTHING;
+  ('40000000-0000-0000-0000-000000000004', 'moonpass_weekly', 'MoonPass Weekly', 'subscription', 'all', 'com.moonlit.weekly_2_99usd', 2.99, NULL, NULL),
+  ('40000000-0000-0000-0000-000000000005', 'moonpass_monthly', 'MoonPass Monthly', 'subscription', 'all', 'com.moonlit.monthly_5_99usd', 5.99, NULL, NULL),
+  ('40000000-0000-0000-0000-000000000006', 'moonpass_quarterly', 'MoonPass Quarterly', 'subscription', 'all', 'com.moonlit.quarterly_14_99usd', 14.99, NULL, NULL),
+  ('40000000-0000-0000-0000-000000000007', 'moonpass_yearly', 'MoonPass Yearly', 'subscription', 'all', 'com.moonlit.yearly_29_99usd', 29.99, NULL, NULL)
+ON CONFLICT (code) DO UPDATE SET
+  name = EXCLUDED.name,
+  platform_product_id = EXCLUDED.platform_product_id,
+  price = EXCLUDED.price,
+  active = EXCLUDED.active;
 
 -- Seed Stories for testing
 INSERT INTO stories (id, title, slug, description, hook, cover_url, status, free_episode_count, default_coin_price, is_featured, is_hot, is_editor_pick, published_at) VALUES

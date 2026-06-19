@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -161,7 +162,19 @@ func (h *SubscriptionHandler) VerifyIAPPurchase(c echo.Context) error {
 		}
 
 	} else if prodType == "subscription" {
-		expiresAt := purchasedAt.AddDate(0, 1, 0) // 1 month duration
+		var expiresAt time.Time
+		switch req.ProductCode {
+		case "moonpass_weekly":
+			expiresAt = purchasedAt.AddDate(0, 0, 7)
+		case "moonpass_quarterly":
+			expiresAt = purchasedAt.AddDate(0, 3, 0)
+		case "moonpass_yearly":
+			expiresAt = purchasedAt.AddDate(1, 0, 0)
+		case "moonpass_monthly":
+			expiresAt = purchasedAt.AddDate(0, 1, 0)
+		default:
+			expiresAt = purchasedAt.AddDate(0, 1, 0) // Fallback to 1 month
+		}
 
 		var subscriptionID uuid.UUID
 		err = tx.QueryRowContext(ctx, `
@@ -328,27 +341,40 @@ func (h *SubscriptionHandler) RevenueCatWebhook(c echo.Context) error {
 	case "INITIAL_PURCHASE", "RENEWAL":
 		// Find product
 		var productID uuid.UUID
+		var productCode string
 		var productArg interface{} = nil
-		if err := h.DB.QueryRowContext(ctx, "SELECT id FROM products WHERE platform_product_id = $1", webhook.Event.ProductID).Scan(&productID); err == nil {
+		if err := h.DB.QueryRowContext(ctx, "SELECT id, code FROM products WHERE platform_product_id = $1", webhook.Event.ProductID).Scan(&productID, &productCode); err == nil {
 			productArg = productID
 		}
 
-		res, _ := h.DB.ExecContext(ctx, `
+		var durationInterval string
+		switch productCode {
+		case "moonpass_weekly":
+			durationInterval = "1 week"
+		case "moonpass_quarterly":
+			durationInterval = "3 months"
+		case "moonpass_yearly":
+			durationInterval = "1 year"
+		default:
+			durationInterval = "1 month"
+		}
+
+		res, _ := h.DB.ExecContext(ctx, fmt.Sprintf(`
 			UPDATE subscriptions
 			SET product_id = $1,
 			    platform = 'revenuecat',
 			    status = 'active',
-			    expires_at = now() + interval '1 month',
+			    expires_at = now() + interval '%s',
 			    latest_transaction_id = $2,
 			    updated_at = now()
 			WHERE user_id = $3 AND status = 'active'
-		`, productArg, webhook.Event.ProductID, appUserID)
+		`, durationInterval), productArg, webhook.Event.ProductID, appUserID)
 		rowsAffected, _ := res.RowsAffected()
 		if rowsAffected == 0 {
-			_, _ = h.DB.ExecContext(ctx, `
+			_, _ = h.DB.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO subscriptions (id, user_id, product_id, platform, status, started_at, expires_at, latest_transaction_id)
-				VALUES ($1, $2, $3, 'revenuecat', 'active', now(), now() + interval '1 month', $4)
-			`, uuid.New(), appUserID, productArg, webhook.Event.ProductID)
+				VALUES ($1, $2, $3, 'revenuecat', 'active', now(), now() + interval '%s', $4)
+			`, durationInterval), uuid.New(), appUserID, productArg, webhook.Event.ProductID)
 		}
 
 	case "CANCELLATION", "EXPIRATION":
