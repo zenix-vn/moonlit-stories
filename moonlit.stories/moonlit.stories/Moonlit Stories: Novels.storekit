@@ -24,7 +24,7 @@
     "_developerTeamID" : "A759U6QWJ9",
     "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 803549522.05259502,
+    "_lastSynchronizedDate" : 803554269.99272299,
     "_locale" : "en_US",
     "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "USA",
@@ -148,7 +148,7 @@
           "internalID" : "6781994246",
           "introductoryOffer" : {
             "billingPlanType" : "BILLED_UPFRONT",
-            "internalID" : "FBADB861",
+            "internalID" : "67B92F57",
             "numberOfPeriods" : 1,
             "paymentMode" : "free",
             "subscriptionPeriod" : "P1W"
@@ -156,7 +156,7 @@
           "introductoryOffers" : [
             {
               "billingPlanType" : "BILLED_UPFRONT",
-              "internalID" : "FBADB861",
+              "internalID" : "67B92F57",
               "numberOfPeriods" : 1,
               "paymentMode" : "free",
               "subscriptionPeriod" : "P1W"
