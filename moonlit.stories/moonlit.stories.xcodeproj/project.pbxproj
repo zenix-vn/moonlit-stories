@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		63852C1F2FE531400084DC8C /* Moonlit Stories: Novels.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 63852C1E2FE531400084DC8C /* Moonlit Stories: Novels.storekit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		54413D812FC8165900A17A69 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		54413D712FC8165700A17A69 /* moonlit.stories.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = moonlit.stories.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		54413D802FC8165900A17A69 /* moonlit.storiesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = moonlit.storiesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		54413D8A2FC8165900A17A69 /* moonlit.storiesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = moonlit.storiesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		63852C1E2FE531400084DC8C /* Moonlit Stories: Novels.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = "Moonlit Stories: Novels.storekit"; path = "moonlit.stories/Moonlit Stories: Novels.storekit"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -88,6 +93,7 @@
 		54413D682FC8165700A17A69 = {
 			isa = PBXGroup;
 			children = (
+				63852C1E2FE531400084DC8C /* Moonlit Stories: Novels.storekit */,
 				54413D732FC8165700A17A69 /* moonlit.stories */,
 				54413D832FC8165900A17A69 /* moonlit.storiesTests */,
 				54413D8D2FC8165900A17A69 /* moonlit.storiesUITests */,
@@ -226,6 +232,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				63852C1F2FE531400084DC8C /* Moonlit Stories: Novels.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
