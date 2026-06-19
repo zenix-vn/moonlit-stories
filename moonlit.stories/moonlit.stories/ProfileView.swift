@@ -10,6 +10,10 @@ struct ProfileView: View {
     @State private var isEditingNickname = false
     @State private var isShowingMoonPass = false
 
+    private var isHighestTier: Bool {
+        subscriptionDetail?.productCode == "moonpass_yearly"
+    }
+
     // Streak / stats (populated from API)
     @State private var readingHours = 0.0
     @State private var activeStreak = 0
@@ -71,7 +75,11 @@ struct ProfileView: View {
                                     }
                                     
                                     if !isSubscribed {
-                                        MoonPassPromoBanner {
+                                        MoonPassPromoBanner(isUpgrade: false) {
+                                            isShowingMoonPass = true
+                                        }
+                                    } else if !isHighestTier {
+                                        MoonPassPromoBanner(isUpgrade: true) {
                                             isShowingMoonPass = true
                                         }
                                     }
@@ -86,6 +94,7 @@ struct ProfileView: View {
                                     // Menu Options List
                                     ProfileMenuList(
                                         isSubscribed: isSubscribed,
+                                        isHighestTier: isHighestTier,
                                         onBuyCoinsTapped: { isShowingCoinShop = true },
                                         onSubscribeTapped: { isShowingMoonPass = true }
                                     )
@@ -418,17 +427,18 @@ struct StatCell: View {
 
 struct ProfileMenuList: View {
     let isSubscribed: Bool
+    let isHighestTier: Bool
     let onBuyCoinsTapped: () -> Void
     let onSubscribeTapped: () -> Void
     
     var body: some View {
         VStack(spacing: 1) {
-            if !isSubscribed {
+            if !isSubscribed || !isHighestTier {
                 Button(action: onSubscribeTapped) {
                     ProfileMenuRow(
                         icon: "moon.stars.fill",
                         color: Color.mlPurple,
-                        title: "Join MoonPass Premium"
+                        title: isSubscribed ? "Upgrade MoonPass Premium" : "Join MoonPass Premium"
                     )
                 }
                 .buttonStyle(.plain)
@@ -626,6 +636,7 @@ struct EditNicknameSheet: View {
 
 // MARK: - MoonPass Promotion Banner
 struct MoonPassPromoBanner: View {
+    let isUpgrade: Bool
     let onUpgrade: () -> Void
     
     var body: some View {
@@ -641,11 +652,11 @@ struct MoonPassPromoBanner: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("MoonPass Subscription")
+                    Text(isUpgrade ? "Upgrade MoonPass" : "MoonPass Subscription")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color.white)
                     
-                    Text("Unlimited access to all stories and premium features.")
+                    Text(isUpgrade ? "Get even more value with a higher-tier plan." : "Unlimited access to all stories and premium features.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.white.opacity(0.8))
                         .lineLimit(2)
@@ -663,7 +674,7 @@ struct MoonPassPromoBanner: View {
                 RoundedRectangle(cornerRadius: 22)
                     .fill(
                         LinearGradient(
-                            colors: [Color.mlPurple, Color.mlPink.opacity(0.85)],
+                            colors: isUpgrade ? [Color.mlGold, Color.mlPink.opacity(0.85)] : [Color.mlPurple, Color.mlPink.opacity(0.85)],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )

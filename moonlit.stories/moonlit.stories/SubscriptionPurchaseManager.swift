@@ -27,6 +27,7 @@ struct MoonPassOffer: Identifiable {
         guard let period = storeProduct?.subscription?.subscriptionPeriod else {
             // Fallback from product code
             switch backendProduct.code {
+            case "moonpass_daily": return "day"
             case "moonpass_weekly": return "week"
             case "moonpass_monthly": return "month"
             case "moonpass_quarterly": return "3 months"
@@ -78,9 +79,26 @@ final class SubscriptionPurchaseManager {
                 return
             }
 
+            let activeSub = try? await NetworkService.shared.fetchSubscription()
+            let activeCode = activeSub?.isSubscribed == true ? activeSub?.subscription?.productCode : nil
+
+            let tiers = [
+                "moonpass_daily": 1,
+                "moonpass_weekly": 2,
+                "moonpass_monthly": 3,
+                "moonpass_quarterly": 4,
+                "moonpass_yearly": 5
+            ]
+            let activeRank = activeCode != nil ? (tiers[activeCode!] ?? 0) : 0
+
             var loadedOffers: [MoonPassOffer] = []
             for sub in subscriptionProducts {
                 guard let productID = sub.platformProductID, !productID.isEmpty else {
+                    continue
+                }
+                
+                let subRank = tiers[sub.code] ?? 0
+                if subRank <= activeRank {
                     continue
                 }
                 
@@ -90,12 +108,13 @@ final class SubscriptionPurchaseManager {
                 loadedOffers.append(MoonPassOffer(backendProduct: sub, storeProduct: storeProduct))
             }
             
-            // Order weekly, monthly, quarterly, yearly
-            let order = ["moonpass_weekly": 1, "moonpass_monthly": 2, "moonpass_quarterly": 3, "moonpass_yearly": 4]
+            // Order daily, weekly, monthly, quarterly, yearly
+            let order = ["moonpass_daily": 1, "moonpass_weekly": 2, "moonpass_monthly": 3, "moonpass_quarterly": 4, "moonpass_yearly": 5]
             loadedOffers.sort { (order[$0.backendProduct.code] ?? 99) < (order[$1.backendProduct.code] ?? 99) }
             
             self.offers = loadedOffers
-            self.selectedOffer = loadedOffers.first(where: { $0.backendProduct.code == "moonpass_monthly" }) ?? loadedOffers.first
+            self.selectedOffer = loadedOffers.first(where: { $0.backendProduct.code == "moonpass_monthly" }) ?? loadedOffers.first ?? loadedOffers.first
+
             
         } catch {
             errorMessage = error.localizedDescription

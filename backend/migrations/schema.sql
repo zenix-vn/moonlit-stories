@@ -753,7 +753,8 @@ INSERT INTO products (id, code, name, type, platform, platform_product_id, price
   ('40000000-0000-0000-0000-000000000004', 'moonpass_weekly', 'MoonPass Weekly', 'subscription', 'all', 'com.moonlit.weekly_2_99usd', 2.99, NULL, NULL),
   ('40000000-0000-0000-0000-000000000005', 'moonpass_monthly', 'MoonPass Monthly', 'subscription', 'all', 'com.moonlit.monthly_5_99usd', 5.99, NULL, NULL),
   ('40000000-0000-0000-0000-000000000006', 'moonpass_quarterly', 'MoonPass Quarterly', 'subscription', 'all', 'com.moonlit.quarterly_14_99usd', 14.99, NULL, NULL),
-  ('40000000-0000-0000-0000-000000000007', 'moonpass_yearly', 'MoonPass Yearly', 'subscription', 'all', 'com.moonlit.yearly_29_99usd', 29.99, NULL, NULL)
+  ('40000000-0000-0000-0000-000000000007', 'moonpass_yearly', 'MoonPass Yearly', 'subscription', 'all', 'com.moonlit.yearly_29_99usd', 29.99, NULL, NULL),
+  ('40000000-0000-0000-0000-000000000008', 'moonpass_daily', 'MoonPass Daily', 'subscription', 'all', 'com.moonlit.daily_0_99usd', 0.99, NULL, NULL)
 ON CONFLICT (code) DO UPDATE SET
   name = EXCLUDED.name,
   platform_product_id = EXCLUDED.platform_product_id,

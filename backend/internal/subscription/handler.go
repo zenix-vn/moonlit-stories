@@ -164,6 +164,8 @@ func (h *SubscriptionHandler) VerifyIAPPurchase(c echo.Context) error {
 	} else if prodType == "subscription" {
 		var expiresAt time.Time
 		switch req.ProductCode {
+		case "moonpass_daily":
+			expiresAt = purchasedAt.AddDate(0, 0, 1)
 		case "moonpass_weekly":
 			expiresAt = purchasedAt.AddDate(0, 0, 7)
 		case "moonpass_quarterly":
@@ -177,24 +179,55 @@ func (h *SubscriptionHandler) VerifyIAPPurchase(c echo.Context) error {
 		}
 
 		var subscriptionID uuid.UUID
+		var currentExpiresAt time.Time
+		var currentProductCode string
+
 		err = tx.QueryRowContext(ctx, `
-			UPDATE subscriptions
-			SET product_id = $1,
-			    platform = $2,
-			    status = 'active',
-			    expires_at = $3,
-			    latest_transaction_id = $4,
-			    raw_payload = $5,
-			    updated_at = now()
-			WHERE user_id = $6
-			  AND (
-			    original_transaction_id = $4
-			    OR latest_transaction_id = $4
-			    OR (status = 'active' AND product_id = $1)
-			  )
-			RETURNING id
-		`, productID, req.Platform, expiresAt, req.TransactionID, rawPayload, userID).Scan(&subscriptionID)
-		if err == sql.ErrNoRows {
+			SELECT s.id, p.code, s.expires_at
+			FROM subscriptions s
+			JOIN products p ON s.product_id = p.id
+			WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > now()
+			LIMIT 1
+		`, userID).Scan(&subscriptionID, &currentProductCode, &currentExpiresAt)
+
+		if err != nil && err != sql.ErrNoRows {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to query active subscription"})
+		}
+
+		if err == nil {
+			// User has an active subscription.
+			tierRank := map[string]int{
+				"moonpass_daily":     1,
+				"moonpass_weekly":    2,
+				"moonpass_monthly":   3,
+				"moonpass_quarterly": 4,
+				"moonpass_yearly":    5,
+			}
+			newRank := tierRank[req.ProductCode]
+			oldRank := tierRank[currentProductCode]
+
+			// Extend expiration if it is an upgrade or same tier
+			if newRank >= oldRank {
+				remaining := currentExpiresAt.Sub(time.Now())
+				if remaining > 0 {
+					expiresAt = expiresAt.Add(remaining)
+				}
+			}
+
+			// Update the active subscription row (performing the upgrade/extension)
+			_, err = tx.ExecContext(ctx, `
+				UPDATE subscriptions
+				SET product_id = $1,
+				    platform = $2,
+				    status = 'active',
+				    expires_at = $3,
+				    latest_transaction_id = $4,
+				    raw_payload = $5,
+				    updated_at = now()
+				WHERE id = $6
+			`, productID, req.Platform, expiresAt, req.TransactionID, rawPayload, subscriptionID)
+		} else {
+			// No active subscription, insert a new one
 			subscriptionID = uuid.New()
 			_, err = tx.ExecContext(ctx, `
 				INSERT INTO subscriptions (id, user_id, product_id, platform, status, started_at, expires_at, original_transaction_id, latest_transaction_id, raw_payload)
@@ -266,11 +299,12 @@ func (h *SubscriptionHandler) GetUserSubscription(c echo.Context) error {
 	var origTx, latTx *string
 
 	err = h.DB.QueryRowContext(ctx, `
-		SELECT id, user_id, product_id, platform, status, started_at, expires_at, canceled_at, original_transaction_id, latest_transaction_id
-		FROM subscriptions
-		WHERE user_id = $1 AND status = 'active' AND expires_at > now()
+		SELECT s.id, s.user_id, s.product_id, COALESCE(p.code, ''), s.platform, s.status, s.started_at, s.expires_at, s.canceled_at, s.original_transaction_id, s.latest_transaction_id
+		FROM subscriptions s
+		LEFT JOIN products p ON s.product_id = p.id
+		WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > now()
 		LIMIT 1
-	`, userID).Scan(&sub.ID, &sub.UserID, &prodID, &sub.Platform, &sub.Status, &start, &expire, &cancel, &origTx, &latTx)
+	`, userID).Scan(&sub.ID, &sub.UserID, &prodID, &sub.ProductCode, &sub.Platform, &sub.Status, &start, &expire, &cancel, &origTx, &latTx)
 
 	if err == sql.ErrNoRows {
 		return c.JSON(http.StatusOK, map[string]interface{}{
@@ -304,12 +338,13 @@ func fetchActiveSubscription(ctx context.Context, q subscriptionQuerier, userID 
 	var origTx, latTx *string
 
 	err := q.QueryRowContext(ctx, `
-		SELECT id, user_id, product_id, platform, status, started_at, expires_at, canceled_at, original_transaction_id, latest_transaction_id
-		FROM subscriptions
-		WHERE user_id = $1 AND status = 'active' AND expires_at > now()
-		ORDER BY expires_at DESC
+		SELECT s.id, s.user_id, s.product_id, COALESCE(p.code, ''), s.platform, s.status, s.started_at, s.expires_at, s.canceled_at, s.original_transaction_id, s.latest_transaction_id
+		FROM subscriptions s
+		LEFT JOIN products p ON s.product_id = p.id
+		WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > now()
+		ORDER BY s.expires_at DESC
 		LIMIT 1
-	`, userID).Scan(&sub.ID, &sub.UserID, &prodID, &sub.Platform, &sub.Status, &start, &expire, &cancel, &origTx, &latTx)
+	`, userID).Scan(&sub.ID, &sub.UserID, &prodID, &sub.ProductCode, &sub.Platform, &sub.Status, &start, &expire, &cancel, &origTx, &latTx)
 	if err != nil {
 		return nil
 	}
@@ -349,6 +384,8 @@ func (h *SubscriptionHandler) RevenueCatWebhook(c echo.Context) error {
 
 		var durationInterval string
 		switch productCode {
+		case "moonpass_daily":
+			durationInterval = "1 day"
 		case "moonpass_weekly":
 			durationInterval = "1 week"
 		case "moonpass_quarterly":

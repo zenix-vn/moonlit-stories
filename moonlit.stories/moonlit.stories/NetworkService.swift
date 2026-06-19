@@ -176,6 +176,7 @@ struct SubscriptionDetail: Codable {
     let id: String
     let userId: String
     let productId: String?
+    let productCode: String?
     let platform: String
     let status: String
     let startedAt: String?
@@ -185,6 +186,7 @@ struct SubscriptionDetail: Codable {
         case id
         case userId = "user_id"
         case productId = "product_id"
+        case productCode = "product_code"
         case platform
         case status
         case startedAt = "started_at"

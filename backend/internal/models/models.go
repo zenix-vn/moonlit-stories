@@ -361,6 +361,7 @@ type Subscription struct {
 	ID                    uuid.UUID       `json:"id"`
 	UserID                uuid.UUID       `json:"user_id"`
 	ProductID             *uuid.UUID      `json:"product_id,omitempty"`
+	ProductCode           string          `json:"product_code,omitempty"`
 	Platform              string          `json:"platform"`
 	Status                string          `json:"status"`
 	StartedAt             *time.Time      `json:"started_at,omitempty"`

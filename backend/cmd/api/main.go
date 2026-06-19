@@ -312,6 +312,7 @@ func syncSubscriptionProducts(db *sql.DB) error {
 	query := `
 		INSERT INTO products (code, name, type, platform, platform_product_id, price, coin_amount, bonus_coin_amount, active)
 		VALUES
+		  ('moonpass_daily', 'MoonPass Daily', 'subscription', 'all', 'com.moonlit.daily_0_99usd', 0.99, NULL, NULL, true),
 		  ('moonpass_weekly', 'MoonPass Weekly', 'subscription', 'all', 'com.moonlit.weekly_2_99usd', 2.99, NULL, NULL, true),
 		  ('moonpass_monthly', 'MoonPass Monthly', 'subscription', 'all', 'com.moonlit.monthly_5_99usd', 5.99, NULL, NULL, true),
 		  ('moonpass_quarterly', 'MoonPass Quarterly', 'subscription', 'all', 'com.moonlit.quarterly_14_99usd', 14.99, NULL, NULL, true),
