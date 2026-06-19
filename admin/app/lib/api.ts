@@ -106,38 +106,18 @@ export const api = {
 
   // Dashboard / Analytics
   getOverviewMetrics: async () => {
-    // Return aggregated analytics metrics or mock realistic stats if database isn't fully aggregated
+    // Real aggregated metrics from /admin/dashboard/overview.
     return apiFetch("/admin/dashboard/overview").catch(() => {
-      // Fallback dashboard details if metrics route has custom implementation
-      return {
-        dau: 1240,
-        subscribers: 156,
-        revenue: 945.50,
-        unlocks: 432,
-      };
+      return { dau: 0, subscribers: 0, revenue: 0, unlocks: 0 };
     });
   },
 
   getRecentActivity: async () => {
-    // Custom endpoint for recent logins & reads
-    return apiFetch("/admin/dashboard/recent-activity").catch(async () => {
-      // Fallback query matching active user session states
-      const res = await apiFetch("/admin/stories").catch(() => []);
-      return [
-        { time: "22:31", user: "emma.watson@gmail.com", country: "US", action: "Reading", story: res[0]?.title || "Reborn as the Villain Queen", episode: "Ep 4", sub: "Free" },
-        { time: "22:30", user: "guest_81231", country: "GB", action: "Unlocked by Ad", story: res[1]?.title || "The Billionaire Fake Wife", episode: "Ep 6", sub: "Free" },
-        { time: "22:28", user: "anna.jones@icloud.com", country: "CA", action: "Subscribed", story: "-", episode: "-", sub: "MoonPass" },
-      ];
-    });
+    return apiFetch("/admin/dashboard/recent-activity").catch(() => []);
   },
 
   getCountryActivity: async () => {
-    return [
-      { country: "United States", code: "US", active_users: 820, subscribers: 110, revenue: 640 },
-      { country: "United Kingdom", code: "GB", active_users: 240, subscribers: 28, revenue: 175 },
-      { country: "Canada", code: "CA", active_users: 110, subscribers: 12, revenue: 95 },
-      { country: "Germany", code: "DE", active_users: 70, subscribers: 6, revenue: 35 },
-    ];
+    return apiFetch("/admin/dashboard/country-activity").catch(() => []);
   },
 
   // Stories CRUD

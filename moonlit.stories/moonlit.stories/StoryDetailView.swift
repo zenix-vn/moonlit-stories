@@ -104,6 +104,11 @@ struct StoryDetailView: View {
             .presentationDragIndicator(.visible)
         }
         .task {
+            AnalyticsService.shared.track(.storyView, [
+                "story_id": story.id,
+                "story_slug": story.slug,
+                "story_title": story.title
+            ])
             // Load episodes and saved state in parallel
             async let episodes: () = viewModel.loadEpisodes(slug: story.slug)
             async let saved: () = viewModel.loadSavedState(storyID: story.id)
@@ -474,7 +479,6 @@ struct UnlockEpisodeSheet: View {
     @State private var showingMoonPassSheet = false
     @State private var isUnlocking = false
     @State private var errorMessage: String? = nil
-    private var adManager: AdManager { AdManager.shared }
 
     var body: some View {
         ZStack {
@@ -535,6 +539,11 @@ struct UnlockEpisodeSheet: View {
                                 do {
                                     let res = try await NetworkService.shared.unlockEpisodeWithCoins(episodeId: episode.id)
                                     if res.status == "unlocked" || res.status == "already_unlocked" {
+                                        AnalyticsService.shared.track(.episodeUnlock, [
+                                            "episode_id": episode.id,
+                                            "method": "coins",
+                                            "coin_price": episode.coinPrice
+                                        ])
                                         NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
                                         onUnlocked()
                                         dismiss()
@@ -549,37 +558,6 @@ struct UnlockEpisodeSheet: View {
                                 }
                                 isUnlocking = false
                             }
-                        }
-                    )
-                    Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
-
-                    UnlockOptionRow(
-                        icon: "play.rectangle.fill",
-                        iconColor: Color(red: 0.3, green: 0.7, blue: 1.0),
-                        title: "Watch an Ad",
-                        subtitle: "Free access for 24 hours",
-                        badge: "FREE",
-                        action: {
-                            errorMessage = nil
-                            adManager.requestAd(
-                                onReward: {
-                                    isUnlocking = true
-                                    do {
-                                        let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: episode.id)
-                                        if res.status == "unlocked" || res.status == "already_unlocked" {
-                                            NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-                                            onUnlocked()
-                                            dismiss()
-                                        }
-                                    } catch {
-                                        errorMessage = error.localizedDescription
-                                    }
-                                    isUnlocking = false
-                                },
-                                onFail: { msg in
-                                    errorMessage = msg
-                                }
-                            )
                         }
                     )
                     Divider().background(Color.white.opacity(0.06)).padding(.leading, 56)
@@ -607,12 +585,6 @@ struct UnlockEpisodeSheet: View {
             }
         }
         .preferredColorScheme(.dark)
-        .fullScreenCover(isPresented: Binding(
-            get: { adManager.isShowingDevAd },
-            set: { if !$0 { adManager.cancelDevAd() } }
-        )) {
-            DevAdView()
-        }
         .sheet(isPresented: $showingShopSheet) {
             NavigationStack {
                 CoinShopView()
@@ -727,6 +699,23 @@ private struct MoonPassSubscriptionView: View {
                         .padding(.horizontal, 20)
                 }
 
+                // Auto-renewable subscription disclosure (App Store requirement)
+                VStack(spacing: 8) {
+                    Text(renewalDisclosure)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.mlSubtext.opacity(0.8))
+                        .multilineTextAlignment(.center)
+
+                    HStack(spacing: 6) {
+                        Link("Terms of Use", destination: LegalLinks.termsOfUse)
+                        Text("·").foregroundStyle(Color.mlSubtext.opacity(0.5))
+                        Link("Privacy Policy", destination: LegalLinks.privacyPolicy)
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .tint(Color.mlPurple)
+                }
+                .padding(.horizontal, 24)
+
                 Button("Maybe Later") {
                     dismiss()
                 }
@@ -745,8 +734,25 @@ private struct MoonPassSubscriptionView: View {
         guard let offer = purchaseManager.offer else {
             return "MoonPass Unavailable"
         }
+        if let period = offer.periodText {
+            return "Start MoonPass · \(offer.displayPrice)/\(period)"
+        }
         return "Start MoonPass · \(offer.displayPrice)"
     }
+
+    private var renewalDisclosure: String {
+        guard let offer = purchaseManager.offer, let period = offer.periodText else {
+            return "Payment is charged to your Apple ID. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in App Store settings."
+        }
+        return "\(offer.displayName) is \(offer.displayPrice) per \(period). Payment is charged to your Apple ID at confirmation. It automatically renews unless cancelled at least 24 hours before the period ends. Manage or cancel anytime in App Store settings."
+    }
+}
+
+// Legal links shown on subscription/purchase screens and in Settings.
+// Required for App Store auto-renewable subscription review.
+enum LegalLinks {
+    static let privacyPolicy = URL(string: "https://moonlit.zenix.vn/privacy")!
+    static let termsOfUse = URL(string: "https://moonlit.zenix.vn/terms")!
 }
 
 private struct MoonPassBenefitRow: View {

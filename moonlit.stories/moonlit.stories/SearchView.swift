@@ -56,6 +56,13 @@ class SearchViewModel {
                 genre: selectedGenreSlug
             )
             stories = applyAdvancedFiltersAndSort(on: fetched)
+            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                AnalyticsService.shared.track(.search, [
+                    "query": query,
+                    "result_count": stories.count,
+                    "genre": selectedGenreSlug ?? ""
+                ])
+            }
             isLoading = false
         } catch {
             errorMessage = error.localizedDescription

@@ -33,6 +33,10 @@ class EpisodeReaderViewModel {
         do {
             let res = try await NetworkService.shared.unlockEpisodeWithCoins(episodeId: id)
             if res.status == "unlocked" || res.status == "already_unlocked" {
+                AnalyticsService.shared.track(.episodeUnlock, [
+                    "episode_id": id,
+                    "method": "coins"
+                ])
                 NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
                 episode = try await NetworkService.shared.fetchEpisodeDetail(episodeId: id)
                 success = true
@@ -48,28 +52,6 @@ class EpisodeReaderViewModel {
         return success
     }
 
-    func unlockWithAd(id: String) {
-        guard !isLoading else { return }
-        errorMessage = nil
-        AdManager.shared.requestAd(
-            onReward: {
-                self.isLoading = true
-                do {
-                    let res = try await NetworkService.shared.unlockEpisodeWithAd(episodeId: id)
-                    if res.status == "unlocked" || res.status == "already_unlocked" {
-                        NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
-                        self.episode = try await NetworkService.shared.fetchEpisodeDetail(episodeId: id)
-                    }
-                } catch {
-                    self.errorMessage = error.localizedDescription
-                }
-                self.isLoading = false
-            },
-            onFail: { msg in
-                self.errorMessage = msg
-            }
-        )
-    }
 }
 
 // MARK: - Reading Settings
@@ -333,12 +315,6 @@ struct EpisodeReaderView: View {
             NavigationStack {
                 CoinShopView()
             }
-        }
-        .fullScreenCover(isPresented: Binding(
-            get: { AdManager.shared.isShowingDevAd },
-            set: { if !$0 { AdManager.shared.cancelDevAd() } }
-        )) {
-            DevAdView()
         }
         .toolbar(.hidden, for: .tabBar)
         .toolbar(.hidden, for: .navigationBar)
@@ -635,25 +611,6 @@ struct EpisodeReaderView: View {
                             colors: [Color.mlPurple, Color.mlPurpleDim],
                             startPoint: .leading, endPoint: .trailing
                         ))
-                    )
-                }
-
-                Button(action: {
-                    viewModel.unlockWithAd(id: ep.id)
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "play.rectangle.fill")
-                            .font(.system(size: 13))
-                        Text("Watch Ad")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.mlPurple)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule()
-                            .fill(Color.mlPurple.opacity(0.12))
-                            .overlay(Capsule().strokeBorder(Color.mlPurple.opacity(0.25), lineWidth: 1))
                     )
                 }
             }
@@ -1117,6 +1074,11 @@ struct EpisodeReaderView: View {
             readingSessionID = sessionID
             readingSessionStartedAt = Date()
             readingProgressStart = viewModel.readProgress * 100.0
+            AnalyticsService.shared.track(.episodeView, [
+                "story_id": story.id,
+                "episode_id": currentEpisode.id,
+                "episode_number": currentEpisode.episodeNumber
+            ])
         } catch {
             #if DEBUG
             print("Failed to start reading session: \(error)")
@@ -1144,6 +1106,13 @@ struct EpisodeReaderView: View {
                 progressEnd: progressEnd,
                 completed: completed
             )
+            if completed {
+                AnalyticsService.shared.track(.episodeCompleted, [
+                    "story_id": story.id,
+                    "episode_id": currentEpisode.id,
+                    "duration_seconds": max(duration, 1)
+                ])
+            }
         } catch {
             #if DEBUG
             print("Failed to finalize reading session: \(error)")

@@ -811,15 +811,6 @@ class NetworkService {
         return result
     }
 
-    // Unlock episode with Ad
-    func unlockEpisodeWithAd(episodeId: String) async throws -> UnlockResponse {
-        let result: UnlockResponse = try await authenticatedPostNoBody("/v1/episodes/\(episodeId)/unlock/ad")
-        APICache.shared.invalidate("episode_\(episodeId)")
-        APICache.shared.invalidatePrefix("episodes_")
-        APICache.shared.invalidate(APICache.Key.libraryMap)
-        return result
-    }
-
     // Fetch active products/subscription packages
     func fetchProducts() async throws -> [Product] {
         return try await authenticatedGet("/v1/products")
@@ -1055,6 +1046,67 @@ class NetworkService {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(MeResponse.self, from: data)
+    }
+
+    // Best-effort analytics event ingestion. Never throws — analytics must not
+    // disrupt the user experience. Silently skips when not yet authenticated.
+    func logEvent(
+        name: String,
+        properties: [String: Any],
+        sessionID: String,
+        platform: String,
+        appVersion: String,
+        countryCode: String?,
+        countryName: String?
+    ) async {
+        guard let token = self.token else { return }
+
+        var body: [String: Any] = [
+            "event_name": name,
+            "session_id": sessionID,
+            "platform": platform,
+            "app_version": appVersion
+        ]
+        if !properties.isEmpty,
+           let propsData = try? JSONSerialization.data(withJSONObject: properties),
+           let propsJSON = try? JSONSerialization.jsonObject(with: propsData) {
+            body["properties"] = propsJSON
+        }
+        if let countryCode { body["country_code"] = countryCode }
+        if let countryName { body["country_name"] = countryName }
+
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else { return }
+
+        let url = baseURL.appendingPathComponent("/v1/events")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = httpBody
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
+    // Permanently delete the authenticated account and all associated data.
+    func deleteAccount() async throws {
+        guard let token = self.token else {
+            throw URLError(.userAuthenticationRequired)
+        }
+
+        let url = baseURL.appendingPathComponent("/v1/me")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        // Clear local credentials and cached data so the app returns to a fresh state.
+        logout()
+        KeychainHelper.delete(forKey: deviceIdKey)
+        APICache.shared.invalidateAll()
     }
 
     // Register push token

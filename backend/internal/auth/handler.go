@@ -440,6 +440,27 @@ func (h *AuthHandler) UpdateCurrentUser(c echo.Context) error {
 	return h.GetCurrentUser(c)
 }
 
+// DeleteCurrentUser permanently deletes the authenticated user's account and
+// all associated data (Apple App Store Guideline 5.1.1(v)). All user-owned
+// rows cascade via ON DELETE CASCADE foreign keys.
+func (h *AuthHandler) DeleteCurrentUser(c echo.Context) error {
+	userID, err := GetUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	ctx := c.Request().Context()
+	res, err := h.DB.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to delete account"})
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "account not found"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 type AdminUserListItem struct {
 	ID          string  `json:"id"`
 	Email       *string `json:"email"`

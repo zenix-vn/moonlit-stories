@@ -20,6 +20,20 @@ struct MoonPassOffer {
     var isPurchasable: Bool {
         storeProduct != nil
     }
+
+    /// Human-readable billing period, e.g. "month", "year", "week".
+    var periodText: String? {
+        guard let period = storeProduct?.subscription?.subscriptionPeriod else { return nil }
+        let unit: String
+        switch period.unit {
+        case .day:   unit = "day"
+        case .week:  unit = "week"
+        case .month: unit = "month"
+        case .year:  unit = "year"
+        @unknown default: unit = "period"
+        }
+        return period.value == 1 ? unit : "\(period.value) \(unit)s"
+    }
 }
 
 @MainActor
@@ -85,6 +99,11 @@ final class SubscriptionPurchaseManager {
                     signedTransaction: verification.jwsRepresentation
                 )
                 await transaction.finish()
+                AnalyticsService.shared.track(.purchaseSuccess, [
+                    "product_code": offer.backendProduct.code,
+                    "product_type": "subscription",
+                    "transaction_id": String(transaction.id)
+                ])
                 NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
                 return true
             case .pending:

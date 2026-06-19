@@ -107,6 +107,7 @@ func main() {
 	// User info
 	v1.GET("/me", authHandler.GetCurrentUser)
 	v1.PATCH("/me", authHandler.UpdateCurrentUser)
+	v1.DELETE("/me", authHandler.DeleteCurrentUser)
 	v1.POST("/notifications/register", authHandler.RegisterPushToken)
 	v1.GET("/notifications", authHandler.ListNotifications)
 	v1.POST("/notifications/:id/open", authHandler.OpenNotification)
@@ -173,6 +174,11 @@ func main() {
 			"roles": roles,
 		})
 	})
+
+	// Dashboard analytics
+	adminGroup.GET("/dashboard/overview", analyticsHandler.AdminDashboardOverview, auth.HasRoleCheck("super_admin", "editor"))
+	adminGroup.GET("/dashboard/recent-activity", analyticsHandler.AdminDashboardRecentActivity, auth.HasRoleCheck("super_admin", "editor"))
+	adminGroup.GET("/dashboard/country-activity", analyticsHandler.AdminDashboardCountryActivity, auth.HasRoleCheck("super_admin", "editor"))
 
 	// User management
 	adminGroup.GET("/users", authHandler.AdminListUsers, auth.HasRoleCheck("super_admin", "editor"))

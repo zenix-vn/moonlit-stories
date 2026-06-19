@@ -327,6 +327,11 @@ struct DailyRewardsView: View {
 
         do {
             let response = try await NetworkService.shared.claimDailyCheckin()
+            AnalyticsService.shared.track(.rewardClaim, [
+                "source": "daily_checkin",
+                "reward_type": response.rewardType,
+                "reward_amount": response.rewardAmount
+            ])
             NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
             await loadData()
             if response.rewardType == "free_pass" {
@@ -352,6 +357,10 @@ struct DailyRewardsView: View {
 
         do {
             let _ = try await NetworkService.shared.claimTaskReward(taskId: task.taskID)
+            AnalyticsService.shared.track(.rewardClaim, [
+                "source": "daily_task",
+                "task_id": task.taskID
+            ])
             NotificationCenter.default.post(name: NSNotification.Name("WalletBalanceChanged"), object: nil)
             await loadData()
         } catch {
