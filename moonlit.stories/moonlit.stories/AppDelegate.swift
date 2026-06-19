@@ -5,6 +5,10 @@ import UserNotifications
 import FirebaseCore
 #endif
 
+#if canImport(FirebaseMessaging)
+import FirebaseMessaging
+#endif
+
 // MARK: - AppDelegate
 // Hosts UIKit-level hooks that SwiftUI's App lifecycle does not expose:
 //   • Firebase initialization (crash reporting / analytics)
@@ -26,6 +30,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
         #endif
 
+        #if canImport(FirebaseMessaging)
+        Messaging.messaging().delegate = self
+        #endif
+
         UNUserNotificationCenter.current().delegate = self
         return true
     }
@@ -36,6 +44,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
+        #if canImport(FirebaseMessaging)
+        Messaging.messaging().apnsToken = deviceToken
+        #endif
+
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task {
             try? await NetworkService.shared.registerPushToken(token: token)
@@ -77,3 +89,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler()
     }
 }
+
+#if canImport(FirebaseMessaging)
+extension AppDelegate: MessagingDelegate {
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let fcmToken else { return }
+        Task {
+            try? await NetworkService.shared.registerPushToken(token: fcmToken)
+        }
+    }
+}
+#endif

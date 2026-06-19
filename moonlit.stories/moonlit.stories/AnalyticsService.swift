@@ -1,5 +1,9 @@
 import Foundation
 
+#if canImport(FirebaseAnalytics)
+import FirebaseAnalytics
+#endif
+
 // MARK: - AnalyticsService
 // Lightweight, fire-and-forget behavioral analytics client.
 // Sends events to the backend `/v1/events` ingestion endpoint, which writes to
@@ -26,6 +30,10 @@ final class AnalyticsService {
         let session = sessionID
         let platform = self.platform
         let appVersion = self.appVersion
+
+        #if canImport(FirebaseAnalytics)
+        Analytics.logEvent(event.rawValue, parameters: properties)
+        #endif
 
         Task.detached(priority: .background) {
             await NetworkService.shared.logEvent(

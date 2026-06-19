@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11164FEBA0536D59C850ACB9 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 58174393BAFEFB6567F056E2 /* FirebaseAnalytics */; };
 		63852C1F2FE531400084DC8C /* Moonlit Stories: Novels.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 63852C1E2FE531400084DC8C /* Moonlit Stories: Novels.storekit */; };
+		A3824735BD652C63532C3150 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 171F4723A07A3FFDF33D896D /* FirebaseMessaging */; };
+		B7374D70A4F02F7C554DD78B /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 08E74892A7931EF71D10A2A8 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,7 +38,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		54413DB12FC8165900A17A69 /* Exceptions for "moonlit.stories" folder in "moonlit.stories" target */ = {
+		54413DB12FC8165900A17A69 = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -45,24 +48,9 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		54413D732FC8165700A17A69 /* moonlit.stories */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				54413DB12FC8165900A17A69 /* Exceptions for "moonlit.stories" folder in "moonlit.stories" target */,
-			);
-			path = moonlit.stories;
-			sourceTree = "<group>";
-		};
-		54413D832FC8165900A17A69 /* moonlit.storiesTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = moonlit.storiesTests;
-			sourceTree = "<group>";
-		};
-		54413D8D2FC8165900A17A69 /* moonlit.storiesUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = moonlit.storiesUITests;
-			sourceTree = "<group>";
-		};
+		54413D732FC8165700A17A69 /* moonlit.stories */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (54413DB12FC8165900A17A69, ); path = moonlit.stories; sourceTree = "<group>"; };
+		54413D832FC8165900A17A69 /* moonlit.storiesTests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = moonlit.storiesTests; sourceTree = "<group>"; };
+		54413D8D2FC8165900A17A69 /* moonlit.storiesUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = moonlit.storiesUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11164FEBA0536D59C850ACB9 /* FirebaseAnalytics in Frameworks */,
+				B7374D70A4F02F7C554DD78B /* FirebaseCrashlytics in Frameworks */,
+				A3824735BD652C63532C3150 /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,6 +122,9 @@
 			);
 			name = moonlit.stories;
 			packageProductDependencies = (
+				58174393BAFEFB6567F056E2 /* FirebaseAnalytics */,
+				08E74892A7931EF71D10A2A8 /* FirebaseCrashlytics */,
+				171F4723A07A3FFDF33D896D /* FirebaseMessaging */,
 			);
 			productName = moonlit.stories;
 			productReference = 54413D712FC8165700A17A69 /* moonlit.stories.app */;
@@ -215,6 +209,9 @@
 			);
 			mainGroup = 54413D682FC8165700A17A69;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				89F140F08F07476A9078EEA2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 54413D722FC8165700A17A69 /* Products */;
 			projectDirPath = "";
@@ -603,6 +600,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		89F140F08F07476A9078EEA2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.28.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		08E74892A7931EF71D10A2A8 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89F140F08F07476A9078EEA2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		171F4723A07A3FFDF33D896D /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89F140F08F07476A9078EEA2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		58174393BAFEFB6567F056E2 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89F140F08F07476A9078EEA2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 54413D692FC8165700A17A69 /* Project object */;
 }
