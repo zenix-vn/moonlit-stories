@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var errorMessage: String? = nil
     @State private var isShowingCoinShop = false
     @State private var isEditingNickname = false
+    @State private var isShowingMoonPass = false
 
     // Streak / stats (populated from API)
     @State private var readingHours = 0.0
@@ -69,6 +70,12 @@ struct ProfileView: View {
                                         isShowingCoinShop = true
                                     }
                                     
+                                    if !isSubscribed {
+                                        MoonPassPromoBanner {
+                                            isShowingMoonPass = true
+                                        }
+                                    }
+                                    
                                     // Stats Grid
                                     StatsGridView(
                                         readingHours: readingHours,
@@ -77,9 +84,11 @@ struct ProfileView: View {
                                     )
                                     
                                     // Menu Options List
-                                    ProfileMenuList(isSubscribed: isSubscribed) {
-                                        isShowingCoinShop = true
-                                    }
+                                    ProfileMenuList(
+                                        isSubscribed: isSubscribed,
+                                        onBuyCoinsTapped: { isShowingCoinShop = true },
+                                        onSubscribeTapped: { isShowingMoonPass = true }
+                                    )
                                 }
                             }
                             
@@ -98,6 +107,15 @@ struct ProfileView: View {
                 EditNicknameSheet(currentNickname: meResponse?.profile?.displayName ?? "") {
                     await loadProfileData()
                 }
+            }
+            .sheet(isPresented: $isShowingMoonPass) {
+                MoonPassSubscriptionView(episodeTitle: nil) {
+                    Task {
+                        await loadProfileData()
+                    }
+                }
+                .presentationDetents([.fraction(0.85), .large])
+                .presentationDragIndicator(.visible)
             }
         }
         .task {
@@ -401,9 +419,22 @@ struct StatCell: View {
 struct ProfileMenuList: View {
     let isSubscribed: Bool
     let onBuyCoinsTapped: () -> Void
+    let onSubscribeTapped: () -> Void
     
     var body: some View {
         VStack(spacing: 1) {
+            if !isSubscribed {
+                Button(action: onSubscribeTapped) {
+                    ProfileMenuRow(
+                        icon: "moon.stars.fill",
+                        color: Color.mlPurple,
+                        title: "Join MoonPass Premium"
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
+            }
             
             // Link to Coin shop
             Button(action: onBuyCoinsTapped) {
@@ -591,5 +622,58 @@ struct EditNicknameSheet: View {
 
 #Preview {
     ProfileView()
+}
+
+// MARK: - MoonPass Promotion Banner
+struct MoonPassPromoBanner: View {
+    let onUpgrade: () -> Void
+    
+    var body: some View {
+        Button(action: onUpgrade) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MoonPass Subscription")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color.white)
+                    
+                    Text("Unlimited access to all stories and premium features.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.8))
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.mlPurple, Color.mlPink.opacity(0.85)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22)
+                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 }
 

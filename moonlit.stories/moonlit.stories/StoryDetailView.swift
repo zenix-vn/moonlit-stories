@@ -604,8 +604,8 @@ struct UnlockEpisodeSheet: View {
     }
 }
 
-private struct MoonPassSubscriptionView: View {
-    let episodeTitle: String
+struct MoonPassSubscriptionView: View {
+    let episodeTitle: String?
     let onActivated: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -630,10 +630,12 @@ private struct MoonPassSubscriptionView: View {
                         .font(.system(size: 21, weight: .bold))
                         .foregroundStyle(Color.white)
 
-                    Text(episodeTitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.mlSubtext)
-                        .multilineTextAlignment(.center)
+                    if let episodeTitle {
+                        Text(episodeTitle)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.mlSubtext)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .padding(.top, 28)
 
@@ -791,7 +793,7 @@ enum LegalLinks {
     static let termsOfUse = URL(string: "https://moonlit.zenix.vn/terms")!
 }
 
-private struct MoonPassBenefitRow: View {
+struct MoonPassBenefitRow: View {
     let icon: String
     let text: String
 
