@@ -1,4 +1,5 @@
 import SwiftUI
+import AppTrackingTransparency
 
 struct ContentView: View {
     @AppStorage("pushNotificationsEnabled") private var pushNotificationsEnabled = true
