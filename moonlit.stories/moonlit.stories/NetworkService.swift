@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Security
+import AppTrackingTransparency
 
 // MARK: - Keychain Helper
 
@@ -495,7 +496,7 @@ class NetworkService {
     }
     
     // Helper to get or create stable device uuid (stored in Keychain, persists across reinstalls)
-    private func getOrCreateDeviceID() -> String {
+    func getOrCreateDeviceID() -> String {
         if let savedID = KeychainHelper.load(forKey: deviceIdKey) {
             return savedID
         }
@@ -1067,6 +1068,11 @@ class NetworkService {
             "platform": platform,
             "app_version": appVersion
         ]
+        
+        // Pass anonymous_id if tracking permission is granted
+        if ATTrackingManager.trackingAuthorizationStatus == .authorized {
+            body["anonymous_id"] = getOrCreateDeviceID()
+        }
         if !properties.isEmpty,
            let propsData = try? JSONSerialization.data(withJSONObject: properties),
            let propsJSON = try? JSONSerialization.jsonObject(with: propsData) {

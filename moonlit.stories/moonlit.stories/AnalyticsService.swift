@@ -1,4 +1,5 @@
 import Foundation
+import AppTrackingTransparency
 
 #if canImport(FirebaseAnalytics)
 import FirebaseAnalytics
@@ -31,14 +32,36 @@ final class AnalyticsService {
         let platform = self.platform
         let appVersion = self.appVersion
 
+        let trackingAllowed = ATTrackingManager.trackingAuthorizationStatus == .authorized
+        let deviceID = NetworkService.shared.getOrCreateDeviceID()
+
+        var backendProperties = properties
+        if trackingAllowed {
+            backendProperties["device_id"] = deviceID
+        } else {
+            backendProperties.removeValue(forKey: "device_id")
+            backendProperties.removeValue(forKey: "deviceId")
+            backendProperties.removeValue(forKey: "device_uuid")
+        }
+
         #if canImport(FirebaseAnalytics)
-        Analytics.logEvent(event.rawValue, parameters: properties)
+        var firebaseProperties = properties
+        if trackingAllowed {
+            firebaseProperties["device_id"] = deviceID
+            Analytics.setUserID(deviceID)
+        } else {
+            firebaseProperties.removeValue(forKey: "device_id")
+            firebaseProperties.removeValue(forKey: "deviceId")
+            firebaseProperties.removeValue(forKey: "device_uuid")
+            Analytics.setUserID(nil)
+        }
+        Analytics.logEvent(event.rawValue, parameters: firebaseProperties)
         #endif
 
         Task.detached(priority: .background) {
             await NetworkService.shared.logEvent(
                 name: event.rawValue,
-                properties: properties,
+                properties: backendProperties,
                 sessionID: session,
                 platform: platform,
                 appVersion: appVersion,
