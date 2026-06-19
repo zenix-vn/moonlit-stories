@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import StoreKit
 
 // MARK: - StoryDetailView ViewModel
 @MainActor
@@ -712,6 +713,19 @@ struct MoonPassSubscriptionView: View {
                         }
                         .disabled(purchaseManager.isPurchasing || purchaseManager.selectedOffer?.isPurchasable != true)
 
+                        if let trialSub = freeTrialSubText {
+                            VStack(spacing: 4) {
+                                Text(trialSub)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Color.white)
+                                Text("Cancel anytime in Settings")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.mlSubtext.opacity(0.8))
+                            }
+                            .padding(.top, 4)
+                            .multilineTextAlignment(.center)
+                        }
+
                         Button {
                             Task {
                                 if await purchaseManager.restoreMoonPass() {
@@ -772,10 +786,59 @@ struct MoonPassSubscriptionView: View {
         guard let offer = purchaseManager.selectedOffer else {
             return "MoonPass Unavailable"
         }
+        let period = offer.periodText ?? "period"
+        if let trialText = freeTrialPeriodText {
+            return "Start \(trialText) Free Trial — then \(offer.displayPrice)/\(period)"
+        }
         if let period = offer.periodText {
             return "Start MoonPass · \(offer.displayPrice)/\(period)"
         }
         return "Start MoonPass · \(offer.displayPrice)"
+    }
+
+    private var freeTrialPeriodText: String? {
+        guard let offer = purchaseManager.selectedOffer else { return nil }
+        if let info = offer.storeProduct?.subscription,
+           let intro = info.introductoryOffer,
+           intro.paymentMode == .freeTrial {
+            let unit: String
+            switch intro.period.unit {
+            case .day:   unit = "Day"
+            case .week:  unit = "Week"
+            case .month: unit = "Month"
+            case .year:  unit = "Year"
+            @unknown default: unit = "Period"
+            }
+            return intro.period.value == 1 ? "1-\(unit)" : "\(intro.period.value)-\(unit)"
+        }
+        // Fallback for yearly offer
+        if offer.backendProduct.code == "moonpass_yearly" {
+            return "7-Day"
+        }
+        return nil
+    }
+
+    private var freeTrialSubText: String? {
+        guard let offer = purchaseManager.selectedOffer else { return nil }
+        if let info = offer.storeProduct?.subscription,
+           let intro = info.introductoryOffer,
+           intro.paymentMode == .freeTrial {
+            let unit: String
+            switch intro.period.unit {
+            case .day:   unit = "day"
+            case .week:  unit = "week"
+            case .month: unit = "month"
+            case .year:  unit = "year"
+            @unknown default: unit = "period"
+            }
+            let periodText = intro.period.value == 1 ? unit : "\(intro.period.value) \(unit)s"
+            return "\(periodText) free, then \(offer.displayPrice) per \(offer.periodText ?? "year")"
+        }
+        // Fallback for yearly offer
+        if offer.backendProduct.code == "moonpass_yearly" {
+            return "7 days free, then \(offer.displayPrice) per year"
+        }
+        return nil
     }
 
     private var renewalDisclosure: String {
