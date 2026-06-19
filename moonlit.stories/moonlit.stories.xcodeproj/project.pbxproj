@@ -7,10 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		11164FEBA0536D59C850ACB9 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 58174393BAFEFB6567F056E2 /* FirebaseAnalytics */; };
 		63852C1F2FE531400084DC8C /* Moonlit Stories: Novels.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 63852C1E2FE531400084DC8C /* Moonlit Stories: Novels.storekit */; };
-		A3824735BD652C63532C3150 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 171F4723A07A3FFDF33D896D /* FirebaseMessaging */; };
-		B7374D70A4F02F7C554DD78B /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 08E74892A7931EF71D10A2A8 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,9 +55,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				11164FEBA0536D59C850ACB9 /* FirebaseAnalytics in Frameworks */,
-				B7374D70A4F02F7C554DD78B /* FirebaseCrashlytics in Frameworks */,
-				A3824735BD652C63532C3150 /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
