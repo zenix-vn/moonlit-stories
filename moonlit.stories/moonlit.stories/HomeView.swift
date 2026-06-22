@@ -198,6 +198,10 @@ struct MainHomeTab: View {
                                 .frame(height: 140)
                             }
 
+                            AdMobBannerView(adUnitID: "ca-app-pub-7988416399180373/2934735716")
+                                .padding(.horizontal, 20)
+                                .frame(height: 50)
+
                             let releases = viewModel.freeEpisodesToday.isEmpty ? viewModel.tonightsPicks : viewModel.freeEpisodesToday
                             NewReleasesSection(stories: filteredStories(releases))
                             
@@ -214,6 +218,12 @@ struct MainHomeTab: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WalletBalanceChanged"))) { _ in
                 APICache.shared.invalidate(APICache.Key.homeFeed)
+                Task {
+                    await viewModel.loadFeed()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UserAuthenticationChanged"))) { _ in
+                APICache.shared.invalidateAll()
                 Task {
                     await viewModel.loadFeed()
                 }

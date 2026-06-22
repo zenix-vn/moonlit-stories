@@ -135,6 +135,17 @@ struct ProfileView: View {
                 await loadProfileData()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UserAuthenticationChanged"))) { _ in
+            Task {
+                await MainActor.run {
+                    self.isLoading = true
+                    self.meResponse = nil
+                    self.subscriptionDetail = nil
+                    self.isSubscribed = false
+                }
+                await loadProfileData()
+            }
+        }
     }
     
     private func loadProfileData() async {

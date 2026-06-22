@@ -29,7 +29,6 @@ struct SettingsView: View {
     @State private var successMessage = ""
     @State private var isShowingErrorAlert = false
     @State private var errorMessage = ""
-    @State private var isShowingLogoutConfirmation = false
     @State private var isShowingDeleteAccountConfirmation = false
     @State private var isDeletingAccount = false
     
@@ -422,23 +421,8 @@ struct SettingsView: View {
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.mlCard))
                         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
                         
-                        // SECTION 6: LOGOUT / ACCOUNT DELETION
+                        // SECTION 6: ACCOUNT MAINTENANCE
                         VStack(spacing: 12) {
-                            Button(action: {
-                                isShowingLogoutConfirmation = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    Text("Log Out")
-                                }
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(Color.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)))
-                                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-                            }
-
                             Button(action: {
                                 isShowingDeleteAccountConfirmation = true
                             }) {
@@ -512,16 +496,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .alert("Log Out", isPresented: $isShowingLogoutConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Log Out", role: .destructive) {
-                // Perform logout
-                NetworkService.shared.logout()
-                dismiss()
-            }
-        } message: {
-            Text("Are you sure you want to log out of Moonlit Stories?")
-        }
         .alert("Delete Account", isPresented: $isShowingDeleteAccountConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
@@ -529,6 +503,7 @@ struct SettingsView: View {
                     await MainActor.run { isDeletingAccount = true }
                     do {
                         try await NetworkService.shared.deleteAccount()
+                        NotificationCenter.default.post(name: NSNotification.Name("UserAuthenticationChanged"), object: nil)
                         await MainActor.run {
                             isDeletingAccount = false
                             dismiss()

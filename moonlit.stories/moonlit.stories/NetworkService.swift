@@ -492,9 +492,10 @@ class NetworkService {
         return KeychainHelper.load(forKey: tokenKey)
     }
     
-    // Clear stored credentials from Keychain
-    func logout() {
+    // Clear stored session token while keeping the persistent device UUID
+    func clearAuthToken() {
         KeychainHelper.delete(forKey: tokenKey)
+        APICache.shared.invalidateAll()
     }
     
     // Helper to get or create stable device uuid (stored in Keychain, persists across reinstalls)
@@ -1111,10 +1112,8 @@ class NetworkService {
             throw URLError(.badServerResponse)
         }
 
-        // Clear local credentials and cached data so the app returns to a fresh state.
-        logout()
-        KeychainHelper.delete(forKey: deviceIdKey)
-        APICache.shared.invalidateAll()
+        // Clear the session token and cached app data so the app can start fresh.
+        clearAuthToken()
     }
 
     // Register push token

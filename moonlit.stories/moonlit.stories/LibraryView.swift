@@ -156,6 +156,11 @@ struct LibraryTabView: View {
             .task {
                 await viewModel.load()
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UserAuthenticationChanged"))) { _ in
+                Task {
+                    await viewModel.load()
+                }
+            }
         }
     }
 }

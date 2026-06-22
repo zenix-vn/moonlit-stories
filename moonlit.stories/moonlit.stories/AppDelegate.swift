@@ -9,6 +9,10 @@ import FirebaseCore
 import FirebaseMessaging
 #endif
 
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+#endif
+
 // MARK: - AppDelegate
 // Hosts UIKit-level hooks that SwiftUI's App lifecycle does not expose:
 //   • Firebase initialization (crash reporting / analytics)
@@ -28,6 +32,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist") != nil {
             FirebaseApp.configure()
         }
+        #endif
+
+        #if canImport(GoogleMobileAds)
+        GADMobileAds.sharedInstance().start(completionHandler: nil)
         #endif
 
         #if canImport(FirebaseMessaging)

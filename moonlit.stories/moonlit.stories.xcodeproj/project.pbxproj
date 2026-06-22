@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		54ED62242FE53BDF00F3A53D /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 58174393BAFEFB6567F056E2 /* FirebaseAnalytics */; };
+		54ED62252FE53BDF00F3A53D /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 08E74892A7931EF71D10A2A8 /* FirebaseCrashlytics */; };
+		54ED62262FE53BDF00F3A53D /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 171F4723A07A3FFDF33D896D /* FirebaseMessaging */; };
 		63852C1F2FE531400084DC8C /* Moonlit Stories: Novels.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 63852C1E2FE531400084DC8C /* Moonlit Stories: Novels.storekit */; };
 /* End PBXBuildFile section */
 
@@ -35,7 +38,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		54413DB12FC8165900A17A69 = {
+		54413DB12FC8165900A17A69 /* Exceptions for "moonlit.stories" folder in "moonlit.stories" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -45,9 +48,24 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		54413D732FC8165700A17A69 /* moonlit.stories */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (54413DB12FC8165900A17A69, ); path = moonlit.stories; sourceTree = "<group>"; };
-		54413D832FC8165900A17A69 /* moonlit.storiesTests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = moonlit.storiesTests; sourceTree = "<group>"; };
-		54413D8D2FC8165900A17A69 /* moonlit.storiesUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = moonlit.storiesUITests; sourceTree = "<group>"; };
+		54413D732FC8165700A17A69 /* moonlit.stories */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				54413DB12FC8165900A17A69 /* Exceptions for "moonlit.stories" folder in "moonlit.stories" target */,
+			);
+			path = moonlit.stories;
+			sourceTree = "<group>";
+		};
+		54413D832FC8165900A17A69 /* moonlit.storiesTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = moonlit.storiesTests;
+			sourceTree = "<group>";
+		};
+		54413D8D2FC8165900A17A69 /* moonlit.storiesUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = moonlit.storiesUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +73,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				54ED62262FE53BDF00F3A53D /* FirebaseMessaging in Frameworks */,
+				54ED62252FE53BDF00F3A53D /* FirebaseCrashlytics in Frameworks */,
+				54ED62242FE53BDF00F3A53D /* FirebaseAnalytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,6 +226,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				89F140F08F07476A9078EEA2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				ABCDABCDABCDABCDABCDABCD /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 54413D722FC8165700A17A69 /* Products */;
@@ -602,6 +624,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 10.28.0;
+			};
+		};
+		ABCDABCDABCDABCDABCDABCD /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.5.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

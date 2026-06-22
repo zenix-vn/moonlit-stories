@@ -51,8 +51,8 @@
 <true/>
 
 <!-- AdMob App ID -->
-<!--<key>GADApplicationIdentifier</key>-->
-<!--<string>ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY</string>-->
+<key>GADApplicationIdentifier</key>
+<string>ca-app-pub-7988416399180373~9686250498</string>
 
 <!-- Scene Configuration -->
 <key>UIApplicationSceneManifest</key>

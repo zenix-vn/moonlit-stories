@@ -6,7 +6,12 @@ struct CoinShopView: View {
     @State private var errorMessage: String? = nil
     @State private var currentBalance: Int = 0
     @State private var gems: Int = 0
-    
+    @State private var isShowingRewardedAdSheet = false
+    @State private var isShowingInterstitialError = false
+    @State private var interstitialMessage: String = ""
+
+    private let interstitialManager = AdMobInterstitialManager.shared
+
     var body: some View {
         ZStack {
             Color.mlBg.ignoresSafeArea()
@@ -102,6 +107,85 @@ struct CoinShopView: View {
                         .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.04)))
                         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.05), lineWidth: 1))
                         .padding(.horizontal, 20)
+
+                        // Rewarded ad section
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "play.circle.fill")
+                                    .foregroundStyle(Color.mlPurple)
+                                    .font(.system(size: 18))
+                                Text("Watch an ad for 50 coins")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(Color.white)
+                            }
+
+                            Text("Need coins fast? Watch a rewarded ad and earn coins instantly.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.mlSubtext)
+                                .lineSpacing(4)
+
+                            Button(action: {
+                                isShowingRewardedAdSheet = true
+                            }) {
+                                Text("Watch Ad")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.mlPurple)
+                                    .cornerRadius(14)
+                            }
+                        }
+                        .padding(20)
+                        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.05), lineWidth: 1))
+                        .padding(.horizontal, 20)
+                        .sheet(isPresented: $isShowingRewardedAdSheet) {
+                            RewardedAdSheet()
+                        }
+
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .foregroundStyle(Color.mlPink)
+                                    .font(.system(size: 18))
+                                Text("Extra bonus ad")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(Color.white)
+                            }
+
+                            Text("Watch an interstitial ad to help support the app and keep rewards free.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.mlSubtext)
+                                .lineSpacing(4)
+
+                            Button(action: {
+                                Task {
+                                    await presentInterstitialAd()
+                                }
+                            }) {
+                                Text(interstitialManager.isLoaded ? "Show Support Ad" : "Loading...")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(interstitialManager.isLoaded ? Color.mlPink : Color.mlMuted)
+                                    .cornerRadius(14)
+                            }
+                            .disabled(!interstitialManager.isLoaded)
+                        }
+                        .padding(20)
+                        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.05), lineWidth: 1))
+                        .padding(.horizontal, 20)
+
+                        if isShowingInterstitialError {
+                            Text(interstitialMessage)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.mlPink)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 20)
+                        }
                         
                         // Navigate to Daily Rewards Button
                         NavigationLink(destination: DailyRewardsView()) {
@@ -132,9 +216,10 @@ struct CoinShopView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadWallet()
+            await interstitialManager.loadInterstitialAd()
         }
     }
-    
+
     private func loadWallet() async {
         isLoading = true
         errorMessage = nil
@@ -149,6 +234,38 @@ struct CoinShopView: View {
             await MainActor.run {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
+            }
+        }
+    }
+
+    private func presentInterstitialAd() async {
+        guard let rootVC = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?
+            .windows
+            .first(where: { $0.isKeyWindow })?
+            .rootViewController else {
+                await MainActor.run {
+                    self.interstitialMessage = "Unable to show interstitial ad."
+                    self.isShowingInterstitialError = true
+                }
+                return
+        }
+
+        do {
+            #if canImport(GoogleMobileAds)
+            try await interstitialManager.presentInterstitial(from: rootVC)
+            await MainActor.run {
+                self.isShowingInterstitialError = false
+                self.interstitialMessage = "Thanks for supporting the app!"
+            }
+            #else
+            throw NSError(domain: "AdMob", code: -1, userInfo: [NSLocalizedDescriptionKey: "AdMob unavailable"])
+            #endif
+        } catch {
+            await MainActor.run {
+                self.interstitialMessage = error.localizedDescription
+                self.isShowingInterstitialError = true
             }
         }
     }
