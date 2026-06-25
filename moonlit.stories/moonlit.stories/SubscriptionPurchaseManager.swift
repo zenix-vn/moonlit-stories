@@ -70,7 +70,7 @@ final class SubscriptionPurchaseManager {
 
         do {
             let products = try await NetworkService.shared.fetchProducts()
-            let subscriptionProducts = products.filter { $0.type == "subscription" && $0.active }
+            let subscriptionProducts = products.filter { $0.type == "subscription" && $0.active && $0.code != "moonpass_daily" }
             
             if subscriptionProducts.isEmpty {
                 errorMessage = "MoonPass is not configured yet."
@@ -91,31 +91,40 @@ final class SubscriptionPurchaseManager {
             ]
             let activeRank = activeCode != nil ? (tiers[activeCode!] ?? 0) : 0
 
-            var loadedOffers: [MoonPassOffer] = []
-            for sub in subscriptionProducts {
-                guard let productID = sub.platformProductID, !productID.isEmpty else {
-                    continue
-                }
-                
+            // Only consider products the user can actually upgrade to.
+            let candidates = subscriptionProducts.filter { sub in
+                guard let productID = sub.platformProductID, !productID.isEmpty else { return false }
                 let subRank = tiers[sub.code] ?? 0
-                if subRank <= activeRank {
-                    continue
-                }
-                
-                let storeProducts = try? await StoreKit.Product.products(for: [productID])
-                let storeProduct = storeProducts?.first(where: { $0.id == productID })
-                
-                loadedOffers.append(MoonPassOffer(backendProduct: sub, storeProduct: storeProduct))
+                return subRank > activeRank
             }
-            
+
+            // Batch-fetch all StoreKit products in a single request (more reliable than
+            // per-product calls, which can silently fail and leave the offer unpurchasable).
+            let productIDs = Array(Set(candidates.compactMap { $0.platformProductID }))
+            let storeProducts = (try? await StoreKit.Product.products(for: productIDs)) ?? []
+            let storeProductByID = Dictionary(storeProducts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+            var loadedOffers: [MoonPassOffer] = candidates.map { sub in
+                let storeProduct = sub.platformProductID.flatMap { storeProductByID[$0] }
+                return MoonPassOffer(backendProduct: sub, storeProduct: storeProduct)
+            }
+
+            // Drop offers StoreKit could not resolve so the user never lands on a dead choice.
+            loadedOffers = loadedOffers.filter { $0.isPurchasable }
+
             // Order daily, weekly, monthly, quarterly, yearly
             let order = ["moonpass_daily": 1, "moonpass_weekly": 2, "moonpass_monthly": 3, "moonpass_quarterly": 4, "moonpass_yearly": 5]
             loadedOffers.sort { (order[$0.backendProduct.code] ?? 99) < (order[$1.backendProduct.code] ?? 99) }
-            
-            self.offers = loadedOffers
-            self.selectedOffer = loadedOffers.first(where: { $0.backendProduct.code == "moonpass_monthly" }) ?? loadedOffers.first ?? loadedOffers.first
 
-            
+            self.offers = loadedOffers
+            // Always default to a purchasable offer (prefer monthly) so the Purchase button is live.
+            self.selectedOffer = loadedOffers.first(where: { $0.backendProduct.code == "moonpass_monthly" })
+                ?? loadedOffers.first
+
+            if loadedOffers.isEmpty {
+                errorMessage = "MoonPass is currently unavailable. Please try again later."
+            }
+
         } catch {
             errorMessage = error.localizedDescription
             offers = []
