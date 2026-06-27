@@ -24,7 +24,7 @@
     "_developerTeamID" : "A759U6QWJ9",
     "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 803554269.99272299,
+    "_lastSynchronizedDate" : 804144640.41057897,
     "_locale" : "en_US",
     "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "USA",
@@ -92,7 +92,7 @@
           "localizations" : [
             {
               "description" : "Read premium stories and earn bonus rewards.",
-              "displayName" : "MoonPass Quarter",
+              "displayName" : "MoonPass Quarterly",
               "locale" : "en_US"
             }
           ],
@@ -148,7 +148,7 @@
           "internalID" : "6781994246",
           "introductoryOffer" : {
             "billingPlanType" : "BILLED_UPFRONT",
-            "internalID" : "67B92F57",
+            "internalID" : "C7413256",
             "numberOfPeriods" : 1,
             "paymentMode" : "free",
             "subscriptionPeriod" : "P1W"
@@ -156,7 +156,7 @@
           "introductoryOffers" : [
             {
               "billingPlanType" : "BILLED_UPFRONT",
-              "internalID" : "67B92F57",
+              "internalID" : "C7413256",
               "numberOfPeriods" : 1,
               "paymentMode" : "free",
               "subscriptionPeriod" : "P1W"

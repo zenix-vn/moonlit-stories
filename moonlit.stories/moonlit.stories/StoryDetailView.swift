@@ -605,6 +605,7 @@ struct UnlockEpisodeSheet: View {
     }
 }
 
+// MARK: - MoonPass Subscription Sheet
 struct MoonPassSubscriptionView: View {
     let episodeTitle: String?
     let onActivated: () -> Void
@@ -612,173 +613,252 @@ struct MoonPassSubscriptionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var purchaseManager = SubscriptionPurchaseManager()
 
+    /// Khi true, hiển thị successView ăn mừng thay cho form mua hàng.
+    /// Set true ngay sau khi purchase/restore thành công; chỉ gọi onActivated()
+    /// + dismiss() khi người dùng bấm "Continue" trên successView.
+    @State private var didSucceed = false
+    @State private var celebrate = false
+
     var body: some View {
         ZStack {
             Color(red: 0.06, green: 0.04, blue: 0.12).ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                VStack(spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .fill(LinearGradient(colors: [Color.mlPurple.opacity(0.35), Color.mlPink.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 72, height: 72)
-                        Image(systemName: "moon.stars.fill")
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(Color.mlPurple)
-                    }
-
-                    Text("MoonPass Subscription")
-                        .font(.system(size: 21, weight: .bold))
-                        .foregroundStyle(Color.white)
-
-                    if let episodeTitle {
-                        Text(episodeTitle)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.mlSubtext)
-                            .multilineTextAlignment(.center)
-                    }
-                }
-                .padding(.top, 28)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    MoonPassBenefitRow(icon: "book.closed.fill", text: "Unlimited access to all story episodes")
-                    MoonPassBenefitRow(icon: "headphones", text: "Premium audio options when available")
-                    MoonPassBenefitRow(icon: "sparkles", text: "Ready for future subscriber-only features")
-                }
-                .padding(18)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.04)))
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
-                .padding(.horizontal, 20)
-
-                if purchaseManager.isLoading {
-                    ProgressView().tint(Color.mlPurple)
-                } else {
-                    // Subscription options list
-                    VStack(spacing: 8) {
-                        ForEach(purchaseManager.offers) { offer in
-                            let isSelected = purchaseManager.selectedOffer?.backendProduct.code == offer.backendProduct.code
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    purchaseManager.selectedOffer = offer
-                                }
-                            }) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(offer.displayName)
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundStyle(Color.white)
-                                        Text(offer.displayPeriodDescription)
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(Color.mlSubtext)
-                                    }
-                                    Spacer()
-                                    Text(offer.displayPrice)
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(Color.white)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 4)
-                                        .background(Capsule().fill(isSelected ? Color.mlPurple : Color.white.opacity(0.08)))
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(isSelected ? Color.mlPurple.opacity(0.12) : Color.white.opacity(0.02)))
-                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(isSelected ? Color.mlPurple : Color.white.opacity(0.06), lineWidth: 1.5))
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-                    
-                    VStack(spacing: 10) {
-                        Button {
-                            Task {
-                                if await purchaseManager.purchaseMoonPass() {
-                                    onActivated()
-                                    dismiss()
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                if purchaseManager.isPurchasing {
-                                    ProgressView().tint(Color.white)
-                                }
-                                Text(primaryButtonTitle)
-                                    .font(.system(size: 15, weight: .bold))
-                            }
-                            .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(LinearGradient(colors: [Color.mlPurple, Color.mlPurpleDim], startPoint: .leading, endPoint: .trailing))
-                            .clipShape(Capsule())
-                        }
-                        .disabled(purchaseManager.isPurchasing || purchaseManager.selectedOffer?.isPurchasable != true)
-
-                        if let trialSub = freeTrialSubText {
-                            VStack(spacing: 4) {
-                                Text(trialSub)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Color.white)
-                                Text("Cancel anytime in Settings")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Color.mlSubtext.opacity(0.8))
-                            }
-                            .padding(.top, 4)
-                            .multilineTextAlignment(.center)
-                        }
-
-                        Button {
-                            Task {
-                                if await purchaseManager.restoreMoonPass() {
-                                    onActivated()
-                                    dismiss()
-                                }
-                            }
-                        } label: {
-                            Text("Restore Purchase")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color.mlSubtext)
-                        }
-                        .disabled(purchaseManager.isPurchasing)
-                    }
-                    .padding(.horizontal, 20)
-                }
-
-                if let error = purchaseManager.errorMessage {
-                    Text(error)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.mlPink)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                }
-
-                // Auto-renewable subscription disclosure (App Store requirement)
-                VStack(spacing: 8) {
-                    Text(renewalDisclosure)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.mlSubtext.opacity(0.8))
-                        .multilineTextAlignment(.center)
-
-                    HStack(spacing: 6) {
-                        Link("Terms of Use", destination: LegalLinks.termsOfUse)
-                        Text("·").foregroundStyle(Color.mlSubtext.opacity(0.5))
-                        Link("Privacy Policy", destination: LegalLinks.privacyPolicy)
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .tint(Color.mlPurple)
-                }
-                .padding(.horizontal, 24)
-
-                Button("Maybe Later") {
-                    dismiss()
-                }
-                .font(.system(size: 14))
-                .foregroundStyle(Color.mlSubtext)
-                .padding(.bottom, 24)
+            if didSucceed {
+                successView
+            } else {
+                formContent
             }
         }
         .preferredColorScheme(.dark)
         .task {
             await purchaseManager.loadMoonPassOffer()
+        }
+    }
+
+    // MARK: - Main purchase form
+    private var formContent: some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [Color.mlPurple.opacity(0.35), Color.mlPink.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 72, height: 72)
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(Color.mlPurple)
+                }
+
+                Text("MoonPass Subscription")
+                    .font(.system(size: 21, weight: .bold))
+                    .foregroundStyle(Color.white)
+
+                if let episodeTitle {
+                    Text(episodeTitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.mlSubtext)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.top, 28)
+
+            VStack(alignment: .leading, spacing: 12) {
+                MoonPassBenefitRow(icon: "book.closed.fill", text: "Unlimited access to all story episodes")
+                MoonPassBenefitRow(icon: "headphones", text: "Premium audio options when available")
+                MoonPassBenefitRow(icon: "sparkles", text: "Ready for future subscriber-only features")
+            }
+            .padding(18)
+            .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+            .padding(.horizontal, 20)
+
+            if purchaseManager.isLoading {
+                ProgressView().tint(Color.mlPurple)
+            } else {
+                // Subscription options list
+                VStack(spacing: 8) {
+                    ForEach(purchaseManager.offers) { offer in
+                        let isSelected = purchaseManager.selectedOffer?.tier == offer.tier
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                purchaseManager.selectedOffer = offer
+                            }
+                        }) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(offer.displayName)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(Color.white)
+                                    Text(offer.displayPeriodDescription)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.mlSubtext)
+                                }
+                                Spacer()
+                                Text(offer.displayPrice)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(Color.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(isSelected ? Color.mlPurple : Color.white.opacity(0.08)))
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(isSelected ? Color.mlPurple.opacity(0.12) : Color.white.opacity(0.02)))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(isSelected ? Color.mlPurple : Color.white.opacity(0.06), lineWidth: 1.5))
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+                
+                VStack(spacing: 10) {
+                    Button {
+                        Task {
+                            if await purchaseManager.purchaseMoonPass() {
+                                showSuccess()
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if purchaseManager.isPurchasing {
+                                ProgressView().tint(Color.white)
+                            }
+                            Text(primaryButtonTitle)
+                                .font(.system(size: 15, weight: .bold))
+                        }
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(LinearGradient(colors: [Color.mlPurple, Color.mlPurpleDim], startPoint: .leading, endPoint: .trailing))
+                        .clipShape(Capsule())
+                    }
+                    .disabled(purchaseManager.isPurchasing || purchaseManager.selectedOffer?.isPurchasable != true)
+
+                    if let trialSub = freeTrialSubText {
+                        VStack(spacing: 4) {
+                            Text(trialSub)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                            Text("Cancel anytime in Settings")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.mlSubtext.opacity(0.8))
+                        }
+                        .padding(.top, 4)
+                        .multilineTextAlignment(.center)
+                    }
+
+                    Button {
+                        Task {
+                            if await purchaseManager.restoreMoonPass() {
+                                showSuccess()
+                            }
+                        }
+                    } label: {
+                        Text("Restore Purchase")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.mlSubtext)
+                    }
+                    .disabled(purchaseManager.isPurchasing)
+                }
+                .padding(.horizontal, 20)
+            }
+
+            if let error = purchaseManager.errorMessage {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.mlPink)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+
+            // Auto-renewable subscription disclosure (App Store requirement)
+            VStack(spacing: 8) {
+                Text(renewalDisclosure)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.mlSubtext.opacity(0.8))
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 6) {
+                    Link("Terms of Use", destination: LegalLinks.termsOfUse)
+                    Text("·").foregroundStyle(Color.mlSubtext.opacity(0.5))
+                    Link("Privacy Policy", destination: LegalLinks.privacyPolicy)
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .tint(Color.mlPurple)
+            }
+            .padding(.horizontal, 24)
+
+            Button("Maybe Later") {
+                dismiss()
+            }
+            .font(.system(size: 14))
+            .foregroundStyle(Color.mlSubtext)
+            .padding(.bottom, 24)
+        }
+    }
+
+    // MARK: - Success celebration view
+    // Hiển thị NGAY sau khi purchase/restore thành công, TRƯỚC khi đóng sheet.
+    // Người dùng bấm "Continue" mới thực sự gọi onActivated() + dismiss().
+    private var successView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(Color.mlPurple.opacity(0.18))
+                    .frame(width: 160, height: 160)
+                    .scaleEffect(celebrate ? 1.0 : 0.3)
+                    .opacity(celebrate ? 1 : 0)
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 84))
+                    .foregroundStyle(Color.mlPurple)
+                    .scaleEffect(celebrate ? 1.0 : 0.4)
+                    .symbolEffect(.bounce, value: celebrate)
+            }
+
+            VStack(spacing: 8) {
+                Text("Welcome to MoonPass!")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(Color.white)
+                Text(purchaseManager.selectedOffer?.tier.displayName ?? "Premium")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.mlPurple)
+                Text("Unlimited access unlocked. Enjoy every story.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.mlSubtext)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            .opacity(celebrate ? 1 : 0)
+            .offset(y: celebrate ? 0 : 12)
+
+            Spacer()
+
+            Button("Continue") {
+                onActivated()
+                dismiss()
+            }
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(LinearGradient(colors: [Color.mlPurple, Color.mlPurpleDim], startPoint: .leading, endPoint: .trailing))
+            .clipShape(Capsule())
+            .padding(.horizontal, 24)
+            .opacity(celebrate ? 1 : 0)
+        }
+        .padding(.bottom, 24)
+        .onAppear {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                celebrate = true
+            }
+        }
+    }
+
+    private func showSuccess() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            didSucceed = true
         }
     }
 
@@ -812,7 +892,7 @@ struct MoonPassSubscriptionView: View {
             return intro.period.value == 1 ? "1-\(unit)" : "\(intro.period.value)-\(unit)"
         }
         // Fallback for yearly offer
-        if offer.backendProduct.code == "moonpass_yearly" {
+        if offer.tier == .yearly {
             return "7-Day"
         }
         return nil
@@ -835,7 +915,7 @@ struct MoonPassSubscriptionView: View {
             return "\(periodText) free, then \(offer.displayPrice) per \(offer.periodText ?? "year")"
         }
         // Fallback for yearly offer
-        if offer.backendProduct.code == "moonpass_yearly" {
+        if offer.tier == .yearly {
             return "7 days free, then \(offer.displayPrice) per year"
         }
         return nil

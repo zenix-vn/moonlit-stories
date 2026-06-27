@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 struct ProfileView: View {
     @State private var meResponse: MeResponse? = nil
@@ -9,12 +10,12 @@ struct ProfileView: View {
     @State private var isShowingCoinShop = false
     @State private var isEditingNickname = false
     @State private var isShowingMoonPass = false
+    @State private var currentTier: MoonPassTier? = nil  // ← đổi thành @State, resolve từ StoreKit
 
     private var isHighestTier: Bool {
-        subscriptionDetail?.productCode == "moonpass_yearly"
+        currentTier == .yearly
     }
 
-    // Streak / stats (populated from API)
     @State private var readingHours = 0.0
     @State private var activeStreak = 0
     @State private var episodesUnlocked = 0
@@ -22,10 +23,8 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background matching Moonlit theme
                 Color.mlBg.ignoresSafeArea()
                 
-                // Decorative background blurs
                 ZStack {
                     Circle()
                         .fill(Color.mlPurple.opacity(0.15))
@@ -44,63 +43,57 @@ struct ProfileView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                            
-                            // Header spacer
-                            Spacer().frame(height: 20)
-                            
-                            // LOADING / PROFILE MAIN CONTENT
-                            if isLoading {
-                                VStack(spacing: 16) {
-                                    ProgressView()
-                                        .tint(Color.mlPurple)
-                                        .scaleEffect(1.2)
-                                    Text("Loading profile...")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundStyle(Color.mlSubtext)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 400)
-                            } else {
-                                VStack(spacing: 24) {
-                                    // User Identity Card
-                                    UserHeaderView(
-                                        user: meResponse?.user,
-                                        profile: meResponse?.profile,
-                                        isSubscribed: isSubscribed,
-                                        onEdit: { isEditingNickname = true }
-                                    )
-                                    
-                                    // Wallet Card (Coins, Gems, Passes)
-                                    WalletStatusCard(wallet: meResponse?.wallet) {
-                                        isShowingCoinShop = true
-                                    }
-                                    
-                                    if !isSubscribed {
-                                        MoonPassPromoBanner(isUpgrade: false) {
-                                            isShowingMoonPass = true
-                                        }
-                                    } else if !isHighestTier {
-                                        MoonPassPromoBanner(isUpgrade: true) {
-                                            isShowingMoonPass = true
-                                        }
-                                    }
-                                    
-                                    // Stats Grid
-                                    StatsGridView(
-                                        readingHours: readingHours,
-                                        activeStreak: activeStreak,
-                                        episodesUnlocked: episodesUnlocked
-                                    )
-                                    
-                                    // Menu Options List
-                                    ProfileMenuList(
-                                        isSubscribed: isSubscribed,
-                                        isHighestTier: isHighestTier,
-                                        onBuyCoinsTapped: { isShowingCoinShop = true },
-                                        onSubscribeTapped: { isShowingMoonPass = true }
-                                    )
-                                }
+                        Spacer().frame(height: 20)
+                        
+                        if isLoading {
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .tint(Color.mlPurple)
+                                    .scaleEffect(1.2)
+                                Text("Loading profile...")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(Color.mlSubtext)
                             }
-                            
+                            .frame(maxWidth: .infinity, minHeight: 400)
+                        } else {
+                            VStack(spacing: 24) {
+                                UserHeaderView(
+                                    user: meResponse?.user,
+                                    profile: meResponse?.profile,
+                                    isSubscribed: isSubscribed,
+                                    currentTier: currentTier,
+                                    subscriptionDetail: subscriptionDetail,
+                                    onEdit: { isEditingNickname = true }
+                                )
+                                
+                                WalletStatusCard(wallet: meResponse?.wallet) {
+                                    isShowingCoinShop = true
+                                }
+                                
+                                if !isSubscribed {
+                                    MoonPassPromoBanner(isUpgrade: false) {
+                                        isShowingMoonPass = true
+                                    }
+                                } else if !isHighestTier {
+                                    MoonPassPromoBanner(isUpgrade: true) {
+                                        isShowingMoonPass = true
+                                    }
+                                }
+                                
+                                StatsGridView(
+                                    readingHours: readingHours,
+                                    activeStreak: activeStreak,
+                                    episodesUnlocked: episodesUnlocked
+                                )
+                                
+                                ProfileMenuList(
+                                    isSubscribed: isSubscribed,
+                                    isHighestTier: isHighestTier,
+                                    onBuyCoinsTapped: { isShowingCoinShop = true },
+                                    onSubscribeTapped: { isShowingMoonPass = true }
+                                )
+                            }
+                        }
                     }
                     .padding(.horizontal, 20)
                 }
@@ -142,12 +135,14 @@ struct ProfileView: View {
                     self.meResponse = nil
                     self.subscriptionDetail = nil
                     self.isSubscribed = false
+                    self.currentTier = nil
                 }
                 await loadProfileData()
             }
         }
     }
     
+    // MARK: - Load Profile Data
     private func loadProfileData() async {
         do {
             async let meTask = NetworkService.shared.fetchMe()
@@ -159,6 +154,11 @@ struct ProfileView: View {
                 self.meResponse = me
                 self.isSubscribed = sub.isSubscribed
                 self.subscriptionDetail = sub.subscription
+                #if DEBUG
+                print("[DEBUG] productCode từ /v1/me/subscription:", sub.subscription?.productCode ?? "nil")
+                print("[DEBUG] status:", sub.subscription?.status ?? "nil")
+                print("[DEBUG] productId (Apple ID):", sub.subscription?.productId ?? "nil")
+                #endif
                 
                 if let stats = me.stats {
                     self.readingHours = stats.readingHours
@@ -168,6 +168,14 @@ struct ProfileView: View {
                 
                 self.isLoading = false
             }
+
+            // Resolve tier từ StoreKit SAU khi có subscription status từ backend
+            if sub.isSubscribed {
+                await resolveCurrentTierFromStoreKit()
+            } else {
+                await MainActor.run { self.currentTier = nil }
+            }
+
         } catch {
             await MainActor.run {
                 self.errorMessage = error.localizedDescription
@@ -178,6 +186,33 @@ struct ProfileView: View {
             #endif
         }
     }
+
+    // MARK: - Resolve Tier từ StoreKit (source of truth)
+    private func resolveCurrentTierFromStoreKit() async {
+        for await result in StoreKit.Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else { continue }
+
+            if let tier = MoonPassTier.allCases.first(where: { $0.rawValue == transaction.productID }) {
+                await MainActor.run { self.currentTier = tier }
+                #if DEBUG
+                print("[StoreKit] ✅ Resolved tier:", tier.rawValue)
+                print("[StoreKit] productID:", transaction.productID)
+                print("[StoreKit] expirationDate:", transaction.expirationDate ?? Date())
+                #endif
+                return
+            }
+        }
+
+        // Fallback về backend nếu StoreKit không trả entitlement nào
+        await MainActor.run {
+            if let code = self.subscriptionDetail?.productCode {
+                self.currentTier = MoonPassTier.from(backendCode: code)
+                #if DEBUG
+                print("[StoreKit] ⚠️ No entitlement found, fallback to backend:", code)
+                #endif
+            }
+        }
+    }
 }
 
 // MARK: - Subviews
@@ -186,9 +221,10 @@ struct UserHeaderView: View {
     let user: User?
     let profile: UserProfile?
     let isSubscribed: Bool
+    let currentTier: MoonPassTier?
+    let subscriptionDetail: SubscriptionDetail?
     var onEdit: () -> Void = {}
 
-    // Nickname (display name) only — the underlying username is never shown.
     private var nickname: String {
         let name = profile?.displayName?.trimmingCharacters(in: .whitespaces) ?? ""
         return name.isEmpty ? "Reader" : name
@@ -196,7 +232,7 @@ struct UserHeaderView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Avatar with glowing gradient borders
+            // Avatar
             ZStack {
                 Circle()
                     .fill(LinearGradient(
@@ -226,6 +262,7 @@ struct UserHeaderView: View {
             }
             
             VStack(alignment: .leading, spacing: 6) {
+                // Nickname + edit + badge
                 HStack(spacing: 8) {
                     Text(nickname)
                         .font(.system(size: 20, weight: .bold))
@@ -241,20 +278,8 @@ struct UserHeaderView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if isSubscribed {
-                        Text("PREMIUM")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(Color.black)
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(
-                                Capsule().fill(
-                                    LinearGradient(
-                                        colors: [Color.mlGold, Color(red: 1.0, green: 0.6, blue: 0.2)],
-                                        startPoint: .leading, endPoint: .trailing
-                                    )
-                                )
-                            )
-                    } else {
+                    // Chỉ hiện LEVEL badge khi chưa subscribe, bỏ hoàn toàn badge vàng khi subscribe
+                    if !isSubscribed {
                         Text("LEVEL \(user?.level ?? 1)")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(Color.mlPurple)
@@ -264,12 +289,30 @@ struct UserHeaderView: View {
                     }
                 }
                 
+                // Email
                 Text(user?.email ?? "Guest account")
                     .font(.system(size: 13))
                     .foregroundStyle(Color.mlSubtext)
                     .lineLimit(1)
                 
-                if let bio = profile?.bio, !bio.isEmpty {
+                // Subscription info hoặc bio
+                if isSubscribed, let tier = currentTier {
+                    HStack(spacing: 6) {
+                        Image(systemName: "moon.stars.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.mlGold)
+
+                        if let expiryString = subscriptionDetail?.expiresAt,
+                           let date = ISO8601DateFormatter().date(from: expiryString) {
+                            let formatted = date.formatted(.dateTime.day().month(.abbreviated).year())
+                            Text("\(tier.displayName) · Renews \(formatted)")
+                        } else {
+                            Text(tier.displayName)
+                        }
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.mlGold.opacity(0.9))
+                } else if let bio = profile?.bio, !bio.isEmpty {
                     Text(bio)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.mlSubtext.opacity(0.8))
@@ -319,32 +362,24 @@ struct WalletStatusCard: View {
             Divider().background(Color.white.opacity(0.08))
             
             HStack(spacing: 0) {
-                // Coins
                 WalletItemView(
                     icon: "bitcoinsign.circle.fill",
                     amount: "\(wallet?.coins ?? 0)",
                     label: "Coins",
                     color: Color.mlGold
                 )
-                
                 Spacer()
-                
-                // Gems
                 WalletItemView(
                     icon: "diamond.fill",
                     amount: "\(wallet?.gems ?? 0)",
                     label: "Gems",
                     color: Color.mlPink
                 )
-                
             }
             .padding(.top, 4)
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 22)
-                .fill(Color.mlCard)
-        )
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.mlCard))
         .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
@@ -418,7 +453,6 @@ struct StatCell: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(color)
             }
-            
             VStack(spacing: 2) {
                 Text(number)
                     .font(.system(size: 16, weight: .bold))
@@ -457,7 +491,6 @@ struct ProfileMenuList: View {
                 Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             }
             
-            // Link to Coin shop
             Button(action: onBuyCoinsTapped) {
                 ProfileMenuRow(
                     icon: "creditcard.fill",
@@ -469,7 +502,6 @@ struct ProfileMenuList: View {
             
             Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             
-            // Check-in check
             NavigationLink(destination: DailyRewardsView()) {
                 ProfileMenuRow(
                     icon: "calendar.badge.clock",
@@ -481,7 +513,6 @@ struct ProfileMenuList: View {
             
             Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             
-            // Settings Link
             NavigationLink(destination: SettingsView()) {
                 ProfileMenuRow(
                     icon: "gearshape.fill",
@@ -493,7 +524,6 @@ struct ProfileMenuList: View {
             
             Divider().background(Color.white.opacity(0.06)).padding(.horizontal, 16)
             
-            // Help & feedback
             NavigationLink(destination: HelpFeedbackView()) {
                 ProfileMenuRow(
                     icon: "questionmark.bubble.fill",
@@ -523,13 +553,10 @@ struct ProfileMenuRow: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(color)
             }
-            
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.white)
-            
             Spacer()
-            
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color.mlSubtext.opacity(0.5))
@@ -541,10 +568,8 @@ struct ProfileMenuRow: View {
 }
 
 // MARK: - Edit Nickname Sheet
-
 struct EditNicknameSheet: View {
     let currentNickname: String
-    /// Called after a successful save so the caller can refresh profile data.
     let onSaved: () async -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -565,7 +590,6 @@ struct EditNicknameSheet: View {
         NavigationStack {
             ZStack {
                 Color.mlBg.ignoresSafeArea()
-
                 VStack(alignment: .leading, spacing: 16) {
                     Text("NICKNAME")
                         .font(.system(size: 12, weight: .bold))
@@ -641,10 +665,6 @@ struct EditNicknameSheet: View {
     }
 }
 
-#Preview {
-    ProfileView()
-}
-
 // MARK: - MoonPass Promotion Banner
 struct MoonPassPromoBanner: View {
     let isUpgrade: Bool
@@ -666,7 +686,6 @@ struct MoonPassPromoBanner: View {
                     Text(isUpgrade ? "Upgrade MoonPass" : "MoonPass Subscription")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color.white)
-                    
                     Text(isUpgrade ? "Get even more value with a higher-tier plan." : "Unlimited access to all stories and premium features.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.white.opacity(0.8))
@@ -699,3 +718,6 @@ struct MoonPassPromoBanner: View {
     }
 }
 
+#Preview {
+    ProfileView()
+}
